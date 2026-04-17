@@ -319,7 +319,17 @@ if __name__ == "__main__":
     shuffled_traj = traj.sample(frac=1, random_state=42).reset_index(drop=True)
 
     # 课程学习开关
-    env = PathEnv(train_mode=True, curriculum_mode=False, mapdata=mapdata, traj=shuffled_traj, FOV=5, distance_threshold=0)
+    train_mode = True
+    curriculum_mode = True
+    FOV = 5
+    distance_threshold = 0
+    env = PathEnv(train_mode=train_mode, 
+                  curriculum_mode=curriculum_mode, 
+                  mapdata=mapdata, 
+                  traj=shuffled_traj, 
+                  FOV=FOV, 
+                  distance_threshold=distance_threshold
+                  )
 
     curriculum_cfg = CurriculumConfig(
         num_stages=1,  # 非课程学习时需要把该参数调整为1 否则为4
