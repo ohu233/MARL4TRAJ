@@ -332,7 +332,7 @@ if __name__ == "__main__":
                   )
 
     curriculum_cfg = CurriculumConfig(
-        num_stages=1,  # 非课程学习时需要把该参数调整为1 否则为4
+        num_stages=4 if curriculum_mode else 1,  # 非课程学习时需要把该参数调整为1 否则为4
         metrics_window=100,
         min_stage_episodes=300,
         promote_reach_rate=85.0,

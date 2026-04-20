@@ -20,7 +20,7 @@ from utils.tools import state_to_vector, calculate_match_rate, plt_multi_map
 traj_test = pd.read_csv('data/data_lower_test.csv')
 EPISODES = len(traj_test)
 MAX_STEPS = 300
-MODEL_PATH = "PathModel\sac_actor_ep10000.pth"
+MODEL_PATH = "PathModel\sac_actor_ep16000.pth"
 SAVE_DIR = None
 
 # True: 测试时每个 episode 使用 row['mode']，不随机
@@ -300,7 +300,7 @@ def run_eval_with_plots(env, agent, traj_df, episodes: int,
 
             # Windows 下文件名不建议含冒号等符号；这里是安全的
             ep_path = os.path.join(save_dir, filename)
-            plt.savefig(ep_path, bbox_inches='tight', dpi=200)
+            # plt.savefig(ep_path, bbox_inches='tight', dpi=200)
             plt.close()
             print(f"[Episode {ep}] reward={total_reward:.3f}, success={success_flag}, saved: {ep_path}")
             if ep % 100 == 0:
