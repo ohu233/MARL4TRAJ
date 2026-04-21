@@ -259,6 +259,7 @@ class ModeEnv:
         self.col = 564
         self.traj_cnt = 0
         self.current_row = None
+        self.mode_maps = mapdata_to_modelmatrix(self.mapdata, self.row, self.col)
         self.mode_speed_stats = self._build_mode_speed_stats()
 
         traj_dummy = pd.DataFrame({"locx_o": [0], "locy_o": [0], "locx_d": [1], "locy_d": [1]})
@@ -356,6 +357,57 @@ class ModeEnv:
 
     def _mask_to_modes(self, mask):
         return [modelist[i] for i, v in enumerate(mask) if int(v) == 1]
+
+    def _default_mode_mask(self):
+        return [1, 1, 1, 1]
+
+    def _infer_init_mode_mask(self, idx: int):
+        """
+        初始化 mode 状态：
+        - 若上一条样本与当前样本 ID 相同，则用上一条终点(locx_d, locy_d)所在模式作为初始mask
+        - 若无上一条样本/ID不一致/无法定位模式，则默认四模式全开
+        """
+        if len(self.traj) <= 1 or idx <= 0:
+            return self._default_mode_mask()
+
+        if "ID" not in self.traj.columns:
+            return self._default_mode_mask()
+
+        cur_row = self.traj.iloc[idx]
+        prev_row = self.traj.iloc[idx - 1]
+
+        cur_id = str(cur_row.get("ID", "")).strip()
+        prev_id = str(prev_row.get("ID", "")).strip()
+        if cur_id == "" or prev_id == "" or cur_id != prev_id:
+            return self._default_mode_mask()
+
+        if ("locx_d" not in self.traj.columns) or ("locy_d" not in self.traj.columns):
+            return self._default_mode_mask()
+
+        try:
+            x = int(round(float(prev_row["locx_d"])))
+            y = int(round(float(prev_row["locy_d"])))
+        except Exception:
+            return self._default_mode_mask()
+
+        mode_maps = self.mode_maps
+        if len(mode_maps) == 0:
+            return self._default_mode_mask()
+
+        first_map = np.asarray(mode_maps[modelist[0]])
+        x_max, y_max = first_map.shape[0], first_map.shape[1]
+        if not (0 <= x < x_max and 0 <= y < y_max):
+            return self._default_mode_mask()
+
+        mask = []
+        for m in modelist:
+            mode_grid = np.asarray(mode_maps[m])
+            mask.append(1 if mode_grid[x, y] != 0 else 0)
+
+        if int(np.sum(mask)) == 0:
+            return self._default_mode_mask()
+
+        return mask
     
     def _action_to_index(self, action):
         """
@@ -503,6 +555,8 @@ class ModeEnv:
         self.finish = False
         self.no_change_streak = 0
 
+        init_mode_mask = self._infer_init_mode_mask(idx)
+
         self.state = {
             "previous":{
                 "mode": [0, 0, 0, 0],
@@ -517,7 +571,7 @@ class ModeEnv:
                 "trans_times":0,
             },
             "current": {
-                "mode": [0, 0, 0, 0],
+                "mode": init_mode_mask,
                 "match_rate": [0.0, 0.0, 0.0, 0.0],
                 "multi_match_rate": 0.0,
                 "success": 0,
