@@ -231,6 +231,7 @@ class PathEnv:
 
 
 class ModeEnv:
+    # TODO:重写:输入为同一ID的一批数据
     """
     Train: 选择 mode 组合（4bit），调用已训练 PathAgent 回放路径，输出匹配指标与奖励
     Test:  同样流程，但关闭扰动，使用评估动作
