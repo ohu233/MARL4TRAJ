@@ -43,6 +43,50 @@ class MLP(nn.Module):
         return self.net(x)
 
 
+class StateEncoder(nn.Module):
+    """将 flat state 拆分为 vector 特征 + patch，可选 CNN 编码 patch"""
+    def __init__(self, vec_dim: int = 12, fov: int = 7, use_conv: bool = True):
+        super().__init__()
+        self.vec_dim = vec_dim
+        self.fov = fov
+        self.use_conv = use_conv
+
+        if use_conv:
+            self.conv = nn.Sequential(
+                nn.Conv2d(1, 4, 3, padding=1), nn.ReLU(),
+            )
+            self.out_dim = vec_dim + 4 * fov * fov
+        else:
+            self.conv = None
+            self.out_dim = vec_dim + fov * fov
+
+    def forward(self, x):
+        vec = x[:, :self.vec_dim]
+        patch = x[:, self.vec_dim:].view(-1, 1, self.fov, self.fov)
+
+        if self.use_conv and self.conv is not None:
+            patch_feat = self.conv(patch).flatten(1)
+        else:
+            patch_feat = patch.flatten(1)
+
+        return torch.cat([vec, patch_feat], dim=1)
+
+
+class PolicyNet(nn.Module):
+    """StateEncoder + MLP head，用于 actor / Q 网络"""
+    def __init__(self, vec_dim: int, fov: int, out_dim: int, hidden_dim: int = 256, use_conv: bool = True):
+        super().__init__()
+        self.encoder = StateEncoder(vec_dim, fov, use_conv)
+        self.head = nn.Sequential(
+            nn.Linear(self.encoder.out_dim, hidden_dim), nn.ReLU(),
+            nn.Linear(hidden_dim, hidden_dim), nn.ReLU(),
+            nn.Linear(hidden_dim, out_dim),
+        )
+
+    def forward(self, x):
+        return self.head(self.encoder(x))
+
+
 @dataclass
 class SACConfig:
     gamma: float = 0.99
@@ -60,19 +104,20 @@ class SACConfig:
 
 
 class DiscreteSACAgent:
-    def __init__(self, state_dim: int, action_dim: int, cfg: SACConfig):
+    def __init__(self, vec_dim: int = 12, fov: int = 5, action_dim: int = 4,
+                 cfg: SACConfig = SACConfig(), use_conv: bool = False):
         self.cfg = cfg
         self.device = torch.device(cfg.device)
         self.action_dim = action_dim
 
-        # actor: 输出每个离散动作的 logits
-        self.actor = MLP(state_dim, action_dim, cfg.hidden_dim).to(self.device)
+        def _make_net(out_dim):
+            return PolicyNet(vec_dim, fov, out_dim, cfg.hidden_dim, use_conv).to(self.device)
 
-        # twin Q
-        self.q1 = MLP(state_dim, action_dim, cfg.hidden_dim).to(self.device)
-        self.q2 = MLP(state_dim, action_dim, cfg.hidden_dim).to(self.device)
-        self.q1_target = MLP(state_dim, action_dim, cfg.hidden_dim).to(self.device)
-        self.q2_target = MLP(state_dim, action_dim, cfg.hidden_dim).to(self.device)
+        self.actor = _make_net(action_dim)
+        self.q1 = _make_net(action_dim)
+        self.q2 = _make_net(action_dim)
+        self.q1_target = _make_net(action_dim)
+        self.q2_target = _make_net(action_dim)
 
         self.q1_target.load_state_dict(self.q1.state_dict())
         self.q2_target.load_state_dict(self.q2.state_dict())

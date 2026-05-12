@@ -17,15 +17,17 @@ from utils.Environment import PathEnv
 from utils.tools import state_to_vector, calculate_match_rate, plt_multi_map
 
 # ========== 配置 ==========
-traj_test = pd.read_csv('data/data_lower_test.csv')
+traj_test = pd.read_csv('data\data_lower_train_random.csv') # ('data/data_lower_test.csv')
 EPISODES = len(traj_test)
 MAX_STEPS = 300
-MODEL_PATH = "PathModel\sac_actor_ep16000.pth"
+MODEL_PATH = "PathModel\sac_actor_ep_withConv_witchCurri.pth"
 SAVE_DIR = None
+FOV = 7
+USE_CONV = True
 
 # True: 测试时每个 episode 使用 row['mode']，不随机
 # False: 保持环境原有随机 mode 采样
-USE_ROW_MODE_FROM_DATA = True
+USE_ROW_MODE_FROM_DATA = False
 
 # 底图相关
 MAP_ROW, MAP_COL = 529, 564
@@ -93,7 +95,7 @@ def mode_legend_handles():
         Line2D([0], [0], color="red", lw=2, label="TS"),
     ]
 
-def load_env(traj_df, use_row_mode_from_data: bool = False):
+def load_env(traj_df, use_row_mode_from_data: bool = False, fov: int = 7):
     """和训练时保持一致的 PathEnv 配置，只是用传入的 traj_df."""
     with open('data/GridModesAdjacentRealworld.pkl', 'rb') as f:
         mapdata = pickle.load(f)
@@ -102,31 +104,23 @@ def load_env(traj_df, use_row_mode_from_data: bool = False):
         train_mode=not use_row_mode_from_data,  # 开关为 True 时关闭随机
         mapdata=mapdata,
         traj=traj_df,
-        FOV=5,
+        FOV=fov,
         distance_threshold=1.0,
     )
     return env
 
 
-def load_agent(env, model_path: str):
+def load_agent(env, model_path: str, use_conv: bool = True):
     """创建 DiscreteSACAgent，并加载 actor 权重。"""
-    # 先保存计数，避免这次 reset 影响后续测试起点
-    old_cnt = env.traj_cnt
-
-    s0 = env.reset()
-    s0_vec = state_to_vector(s0)
-    state_dim = s0_vec.shape[0]
-    action_dim = 4  # PathEnv: 上右下左
-
     cfg = SACConfig(device="cpu")
     device = torch.device(cfg.device)
 
-    agent = DiscreteSACAgent(state_dim, action_dim, cfg)
+    agent = DiscreteSACAgent(vec_dim=12, fov=env.FOV, action_dim=4,
+                              cfg=cfg, use_conv=use_conv)
     state_dict = torch.load(model_path, map_location=device)
     agent.actor.load_state_dict(state_dict)
     agent.actor.eval()
 
-    # 恢复轨迹计数，保证正式测试从头开始
     env.traj_cnt = 0
     return agent
 
@@ -327,8 +321,8 @@ if __name__ == "__main__":
 
     traj_test = pd.read_csv('data\\data_lower_test.csv')
 
-    env = load_env(traj_test, use_row_mode_from_data=USE_ROW_MODE_FROM_DATA)
-    agent = load_agent(env, MODEL_PATH)
+    env = load_env(traj_test, use_row_mode_from_data=USE_ROW_MODE_FROM_DATA, fov=FOV)
+    agent = load_agent(env, MODEL_PATH, use_conv=USE_CONV)
 
     run_eval_with_plots(
         env, agent,

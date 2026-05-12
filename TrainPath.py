@@ -37,6 +37,7 @@ def train_sac_on_pathenv(
     cfg: SACConfig = SACConfig(),
     curriculum_cfg: CurriculumConfig = CurriculumConfig(),
     seed: int = 42,
+    use_conv: bool = False,
 ):
     random.seed(seed)
     np.random.seed(seed)
@@ -48,13 +49,14 @@ def train_sac_on_pathenv(
     env.traj_cnt = 0
 
     action_dim = 4
-
-    agent = DiscreteSACAgent(state_dim, action_dim, cfg)
+    agent = DiscreteSACAgent(vec_dim=12, fov=env.FOV, action_dim=action_dim,
+                              cfg=cfg, use_conv=use_conv)
 
     stage_trajs = env.split_traj_by_distance(curriculum_cfg.num_stages)
     stage_idx = 0
     env.set_curriculum_stage(stage_idx, stage_trajs[stage_idx], max_mode_count=4)
     env.set_mode_sampling_range(min_mode_count=1, max_mode_count=4)
+
 
     in_refine_phase = False
     stage_episode_count = 0
@@ -76,6 +78,7 @@ def train_sac_on_pathenv(
     mode_max_count_list = []
     refine_phase_list = []
 
+    tag = "_withConv" if use_conv else ""
 
     def _save_metrics_and_plots(ep):
         episodes_x = np.arange(1, len(logs) + 1)
@@ -86,7 +89,7 @@ def train_sac_on_pathenv(
         plt.plot(episodes_x, avg_reward_100_list, label="Avg Reward (Last 100)", linewidth=2)
         plt.xlabel("Episode"); plt.ylabel("Reward")
         plt.legend(); plt.tight_layout()
-        plt.savefig(f"PathModel/reward_curves_ep{ep}.png", dpi=200)
+        plt.savefig(f"PathModel/reward_curves_ep{ep}{tag}.png", dpi=200)
         plt.close()
 
         # 到达率 + 匹配率
@@ -95,7 +98,7 @@ def train_sac_on_pathenv(
         plt.plot(episodes_x, match_rate_100_list, label="Match Rate (Last 100) %", linewidth=2)
         plt.xlabel("Episode"); plt.ylabel("Rate (%)")
         plt.legend(); plt.tight_layout()
-        plt.savefig(f"PathModel/rate_curves_ep{ep}.png", dpi=200)
+        plt.savefig(f"PathModel/rate_curves_ep{ep}{tag}.png", dpi=200)
         plt.close()
 
         # Actor/Critic Loss
@@ -104,7 +107,7 @@ def train_sac_on_pathenv(
         plt.plot(episodes_x, critic_loss_ep_list, label="Critic Loss", linewidth=2)
         plt.xlabel("Episode"); plt.ylabel("Loss")
         plt.legend(); plt.tight_layout()
-        plt.savefig(f"PathModel/loss_curves_ep{ep}.png", dpi=200)
+        plt.savefig(f"PathModel/loss_curves_ep{ep}{tag}.png", dpi=200)
         plt.close()
 
 
@@ -236,7 +239,7 @@ def train_sac_on_pathenv(
                 print("[Curriculum] Final stage stable, switch map combo to random1-3.")
 
         if ep % 1000 == 0:
-            torch.save(agent.actor.state_dict(), f"PathModel/sac_actor_ep{ep}.pth")
+            torch.save(agent.actor.state_dict(), f"PathModel/sac_actor_ep{ep}{tag}.pth")
             _save_metrics_and_plots(ep)
 
     episodes_x = np.arange(1, len(logs) + 1)
@@ -251,7 +254,7 @@ def train_sac_on_pathenv(
     plt.grid(True, alpha=0.3)
     plt.legend()
     plt.tight_layout()
-    plt.savefig("PathModel/reward_curves.png", dpi=200)
+    plt.savefig(f"PathModel/reward_curves{tag}.png", dpi=200)
     plt.close()
 
     # 图2: 到达率 + 匹配率（均为100回合滑动窗口）
@@ -264,7 +267,7 @@ def train_sac_on_pathenv(
     plt.grid(True, alpha=0.3)
     plt.legend()
     plt.tight_layout()
-    plt.savefig("PathModel/rate_curves.png", dpi=200)
+    plt.savefig(f"PathModel/rate_curves{tag}.png", dpi=200)
     plt.close()
 
     # 图3: Actor/Critic Loss
@@ -277,7 +280,7 @@ def train_sac_on_pathenv(
     plt.grid(True, alpha=0.3)
     plt.legend()
     plt.tight_layout()
-    plt.savefig("PathModel/loss_curves.png", dpi=200)
+    plt.savefig(f"PathModel/loss_curves{tag}.png", dpi=200)
     plt.close()
 
     metrics_df = pd.DataFrame({
@@ -293,8 +296,8 @@ def train_sac_on_pathenv(
         "in_refine_phase": refine_phase_list,
     })
 
-    metrics_df.to_csv("PathModel/train_metrics.csv", index=False, encoding="utf-8")
-    print("Saved metrics CSV to: PathModel/train_metrics.csv")
+    metrics_df.to_csv(f"PathModel/train_metrics{tag}.csv", index=False, encoding="utf-8")
+    print(f"Saved metrics CSV to: PathModel/train_metrics{tag}.csv")
 
     return agent, logs
 
@@ -316,13 +319,14 @@ if __name__ == "__main__":
     # 课程学习开关
     train_mode = True
     curriculum_mode = True
-    FOV = 5
+    USE_CONV = False
+    FOV = 7
     distance_threshold = 1.0
-    env = PathEnv(train_mode=train_mode, 
-                  curriculum_mode=curriculum_mode, 
-                  mapdata=mapdata, 
-                  traj=shuffled_traj, 
-                  FOV=FOV, 
+    env = PathEnv(train_mode=train_mode,
+                  curriculum_mode=curriculum_mode,
+                  mapdata=mapdata,
+                  traj=shuffled_traj,
+                  FOV=FOV,
                   distance_threshold=distance_threshold
                   )
 
@@ -339,4 +343,4 @@ if __name__ == "__main__":
         refine_patience=4,
     )
 
-    agent, logs = train_sac_on_pathenv(env, episodes=25000, curriculum_cfg=curriculum_cfg)
+    agent, logs = train_sac_on_pathenv(env, episodes=5000, curriculum_cfg=curriculum_cfg, use_conv=USE_CONV)

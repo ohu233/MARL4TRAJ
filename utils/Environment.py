@@ -237,6 +237,7 @@ class ModeEnv:
         train_mode: bool = True,
         fov: int = 5,
         distance_threshold: float = 1.0,
+        use_conv: bool = False,
     ):
         self.model_path = model_path
         self.mapdata = mapdata
@@ -244,6 +245,7 @@ class ModeEnv:
         self.train_mode = train_mode
         self.fov = fov
         self.distance_threshold = distance_threshold
+        self.use_conv = use_conv
         self.max_mode_steps = 50
 
         self.no_change_patience = 5      # 连续多少步不变就提前结束
@@ -256,25 +258,11 @@ class ModeEnv:
         self.mode_maps = mapdata_to_modelmatrix(self.mapdata, self.row, self.col)
         self.mode_speed_stats = self._build_mode_speed_stats()
 
-        traj_dummy = pd.DataFrame({"locx_o": [0], "locy_o": [0], "locx_d": [1], "locy_d": [1]})
-        path_env = PathEnv(
-            train_mode=False,
-            selected_mode=np.array(modelist),
-            mapdata=self.mapdata,
-            traj=traj_dummy,
-            FOV=self.fov,
-            distance_threshold=0.0,
-        )
-
-        s0 = path_env.reset()
-        s0_vec = state_to_vector(s0)
-        state_dim = s0_vec.shape[0]
-        action_dim = 4
-
         cfg = SACConfig()
         device = torch.device(cfg.device)
 
-        path_agent = DiscreteSACAgent(state_dim, action_dim, cfg)
+        path_agent = DiscreteSACAgent(vec_dim=12, fov=self.fov, action_dim=4,
+                                       cfg=cfg, use_conv=self.use_conv)
         state_dict = torch.load(self.model_path, map_location=device)
         path_agent.actor.load_state_dict(state_dict)
         path_agent.actor.eval()
