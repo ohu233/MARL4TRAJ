@@ -487,6 +487,9 @@ class ModeEnv:
 
         x_max, y_max = env.multi_mapdata.shape[0], env.multi_mapdata.shape[1]
 
+        # 提前把 sparse matrix 转成 dense array，避免在循环里反复转换
+        _mode_maps = {m: np.asarray(env.mapdata[m]) for m in selected_modes}
+
         for p in traj_points:
             if p is None or len(p) < 2:
                 continue
@@ -496,7 +499,7 @@ class ModeEnv:
                 continue
 
             # 当前点在 selected_modes 中可用的 mode 集合
-            curr_modes = {m for m in selected_modes if np.asarray(env.mapdata[m])[x, y] != 0}
+            curr_modes = {m for m in selected_modes if _mode_maps[m][x, y] != 0}
 
             # 严格：没有任何 mode 时，视作一种独立 mode
             if not curr_modes:
@@ -526,6 +529,7 @@ class ModeEnv:
         if len(traj_points) > 0 and len(selected_modes) > 0:
             ref_map = np.asarray(env.multi_mapdata)
             x_max, y_max = ref_map.shape[0], ref_map.shape[1]
+            _mode_maps = {m: np.asarray(env.mapdata[m]) for m in selected_modes}
 
             for p in traj_points:
                 if p is None or len(p) < 2:
@@ -536,7 +540,7 @@ class ModeEnv:
                     continue
 
                 for m in selected_modes:
-                    if np.asarray(env.mapdata[m])[x, y] != 0:
+                    if _mode_maps[m][x, y] != 0:
                         mode_scores[m] += 1.0
 
         match_rate = []

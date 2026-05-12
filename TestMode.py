@@ -136,6 +136,13 @@ def evaluate_mode_dqn(cfg: TestModeConfig):
                 + "\n"
             )
 
+            print(
+                f"[Ep {ep:05d}/{n_episodes}] "
+                f"reward={ep_reward:.3f}, success={int(succ)}, finish={env.finish}, "
+                f"steps={env.step_cnt}, true_mode={true_mode}, "
+                f"selected={selected_modes}, mode_hit={mode_hit}"
+            )
+
             rows.append(
                 {
                     "episode": ep,
