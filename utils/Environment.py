@@ -1,3 +1,4 @@
+import copy
 import pickle
 import numpy as np
 import pandas as pd
@@ -10,9 +11,6 @@ from utils.tools import mapdata_to_modelmatrix, get_patch, state_to_vector, calc
 # global variables
 dxdy_dict = {0: (1, 0), 1: (0, 1), 2: (-1, 0), 3: (0, -1)}
 modelist = ['GSD', 'GG', 'TS', 'TG']
-
-with open('data/GridModesAdjacentRealworld.pkl', 'rb') as f:
-    mapdata = pickle.load(f)
 
 class PathEnv:
     '''
@@ -75,7 +73,7 @@ class PathEnv:
 
         self.neighbor = get_patch(self.multi_mapdata, self.locx_start, self.locy_start, size=3)
 
-        self.max_step = max(1, int((abs(self.locx_start - self.locx_end) + abs(self.locy_start - self.locy_end)) * 6))
+        self.max_step = max(1, int((abs(self.locx_start - self.locx_end) + abs(self.locy_start - self.locy_end)) * 3))
 
         self.traj_cnt += 1
 
@@ -152,20 +150,15 @@ class PathEnv:
         '''
 
         if is_on_road:
-            reward += 8
-            if dist_change >= 0:
-                reward += 3
-
+            reward += 1
         else:
-            reward -= 10
-            if dist_change >= 0:
-                reward -= 2
-            else:
-                reward -= 4
+            reward -= 5
 
+        if dist_change >= 0:
+            reward += 3
 
-        # 3. 时间/步数惩罚：鼓励尽快到达
-        # reward -= 0.3
+        # 步数惩罚：鼓励尽快到达
+        reward -= 0.5
 
         return reward
 
@@ -193,7 +186,7 @@ class PathEnv:
 
         visit_count = self.node_memory.get(self.state['current_position'])
         self.state['visit_count'] = visit_count
-        reward -= visit_count * 2
+        reward -= min(visit_count * 2, 4)
 
         # 更新绝对坐标
         self.locx_start += dxdy_dict[action][0]
@@ -219,10 +212,10 @@ class PathEnv:
         if curr_dist <= self.distance_threshold:
             done = True
             success = 1
-            reward += 90
+            reward += 50
         elif self.step_cnt >= self.max_step:
             done = True
-            reward -= 30
+            reward -= 5
         else:
             done = False
 
@@ -410,43 +403,6 @@ class ModeEnv:
 
         return mask
     
-    def _action_to_index(self, action):
-        """
-        动作语义：
-        0 -> 不变
-        1~4 -> 翻转对应 mode bit（1->GSD, 2->GG, 3->TS, 4->TG）
-        """
-        if not np.isscalar(action):
-            arr = np.asarray(action).reshape(-1)
-            if arr.shape[0] in (4, 5):
-                # 若上层偶尔传 onehot/score，取 argmax 兼容
-                a = int(np.argmax(arr))
-            else:
-                raise ValueError(f"action must be scalar in [0,4] or len-5 array, got shape {arr.shape}")
-        else:
-            a = int(action)
-
-        if a < 0 or a > 4:
-            raise ValueError(f"action id out of range: {a}, expected [0, 4]")
-        return a
-
-    def _flip_one_bit(self, prev_mask, action):
-        m = np.asarray(prev_mask, dtype=np.int64).copy()
-        idx = self._action_to_index(action)
-
-        # idx=0 表示不变，允许策略在当前组合上停留以便收敛
-        if idx == 0:
-            return m
-
-        bit_idx = idx - 1
-        m[bit_idx] = 1 - m[bit_idx]
-
-        # 不允许全关
-        if int(m.sum()) == 0:
-            m[bit_idx] = 1
-
-        return m
-
     def _run_PathMode(self, selected_modes):
         traj_one = self.current_row.reset_index(drop=True)  # 当前数据
 
@@ -564,7 +520,7 @@ class ModeEnv:
 
         self.state = {
             "previous":{
-                "mode": [0, 0, 0, 0],
+                "mode": [1, 1, 1, 1],
                 "match_rate": [0.0, 0.0, 0.0, 0.0],
                 "multi_match_rate": 0.0,
                 "success": 0,
@@ -595,7 +551,7 @@ class ModeEnv:
         self.step_cnt += 1
         reward = 0.0
 
-        self.state["previous"] = dict(self.state["current"])
+        self.state["previous"] = copy.deepcopy(self.state["current"])
 
         time = float(self.current_row['time'].iat[0])
         distance = float(self.current_row['distance'].iat[0])
@@ -605,13 +561,19 @@ class ModeEnv:
         if int(prev_mask.sum()) == 0:
             prev_mask[np.random.randint(0, 4)] = 1
 
-        cur_mask = self._flip_one_bit(prev_mask, action)
+        # action: 0~14 直接对应 4-bit mask（action+1 的二进制，1~15，排除全零）
+        mask_int = int(action) + 1
+        cur_mask = np.array([
+            (mask_int >> 3) & 1,
+            (mask_int >> 2) & 1,
+            (mask_int >> 1) & 1,
+            mask_int & 1,
+        ], dtype=np.int64)
         selected_modes = self._mask_to_modes(cur_mask)
 
-        changed = (cur_mask.tolist() != prev_mask.tolist())
+        changed = not np.array_equal(cur_mask, prev_mask)
         if changed:
             self.no_change_streak = 0
-            reward -= 1
         else:
             self.no_change_streak += 1
         
@@ -773,9 +735,9 @@ if __name__ == "__main__":
 
                 while not done:
                     # 随机选择动作
-                    action = np.random.randint(0, 5)
+                    action = np.random.randint(0, 15)
                     log_file.write(f"action: {action}\n")
-                                   
+
                     # 执行动作
                     state, r, done, succ, _ = modeenv.step(action)
                     

@@ -42,7 +42,7 @@ def train_dqn_on_modeenv(env: ModeEnv, cfg: DQNConfig, tcfg: TrainModeConfig):
     env.traj_cnt -= 1
     s0_vec = mode_state_to_vector(s0)
     state_dim = s0_vec.shape[0]
-    action_dim = 5  # 4bit mode组合
+    action_dim = 15  # 4bit mode组合 (1~15, 排除全零)
 
     agent = DQNAgent(state_dim=state_dim, action_dim=action_dim, cfg=cfg)
 

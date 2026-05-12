@@ -235,14 +235,9 @@ def train_sac_on_pathenv(
                 refine_stable_count = 0
                 print("[Curriculum] Final stage stable, switch map combo to random1-3.")
 
-        if ep <= 2000:
-            if ep % 500 == 0:
-                torch.save(agent.actor.state_dict(), f"PathModel/sac_actor_ep{ep}.pth")
-                _save_metrics_and_plots(ep)
-        else:
-            if ep % 2000 == 0:
-                torch.save(agent.actor.state_dict(), f"PathModel/sac_actor_ep{ep}.pth")
-                _save_metrics_and_plots(ep)
+        if ep % 1000 == 0:
+            torch.save(agent.actor.state_dict(), f"PathModel/sac_actor_ep{ep}.pth")
+            _save_metrics_and_plots(ep)
 
     episodes_x = np.arange(1, len(logs) + 1)
 
@@ -322,7 +317,7 @@ if __name__ == "__main__":
     train_mode = True
     curriculum_mode = True
     FOV = 5
-    distance_threshold = 0
+    distance_threshold = 1.0
     env = PathEnv(train_mode=train_mode, 
                   curriculum_mode=curriculum_mode, 
                   mapdata=mapdata, 

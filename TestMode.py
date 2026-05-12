@@ -62,7 +62,7 @@ def evaluate_mode_dqn(cfg: TestModeConfig):
     dqn_cfg = DQNConfig(
         device="cuda" if torch.cuda.is_available() else "cpu",
     )
-    agent = DQNAgent(state_dim=s0_vec.shape[0], action_dim=5, cfg=dqn_cfg)
+    agent = DQNAgent(state_dim=s0_vec.shape[0], action_dim=15, cfg=dqn_cfg)
     agent.load(cfg.model_path)
     agent.q.eval()
     agent.q_tgt.eval()
