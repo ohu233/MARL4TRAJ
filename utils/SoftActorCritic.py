@@ -54,10 +54,8 @@ class StateEncoder(nn.Module):
         if use_conv:
             self.conv = nn.Sequential(
                 nn.Conv2d(1, 4, 3, padding=1), nn.ReLU(),
-                nn.Conv2d(4, 8, 3, padding=1, stride=2), nn.ReLU(),
             )
-            h = (fov + 1) // 2
-            self.out_dim = vec_dim + 8 * h * h
+            self.out_dim = vec_dim + 4 * fov * fov
         else:
             self.conv = None
             self.out_dim = vec_dim + fov * fov
@@ -72,8 +70,6 @@ class StateEncoder(nn.Module):
             patch_feat = patch.flatten(1)
 
         return torch.cat([vec, patch_feat], dim=1)
-        else:
-            return torch.cat([vec, patch.flatten(1)], dim=1)
 
 
 class PolicyNet(nn.Module):
