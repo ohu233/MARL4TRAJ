@@ -20,9 +20,9 @@ from utils.tools import state_to_vector, calculate_match_rate, plt_multi_map
 traj_test = pd.read_csv('data\data_lower_train_random.csv') # ('data/data_lower_test.csv')
 EPISODES = len(traj_test)
 MAX_STEPS = 300
-MODEL_PATH = "PathModel\sac_actor_ep_withConv_witchCurri.pth"
+MODEL_PATH = "PathModel\sac_actor_ep5000_withConv_withCurri.pth"
 SAVE_DIR = None
-FOV = 7
+FOV = 9
 USE_CONV = True
 
 # True: 测试时每个 episode 使用 row['mode']，不随机

@@ -53,9 +53,11 @@ class StateEncoder(nn.Module):
 
         if use_conv:
             self.conv = nn.Sequential(
-                nn.Conv2d(1, 4, 3, padding=1), nn.ReLU(),
+                nn.Conv2d(1, 8, 3, padding=1), nn.ReLU(),
+                nn.Conv2d(8, 16, 3, padding=1, stride=2), nn.ReLU(),
             )
-            self.out_dim = vec_dim + 4 * fov * fov
+            h = (fov + 1) // 2
+            self.out_dim = vec_dim + 16 * h * h
         else:
             self.conv = None
             self.out_dim = vec_dim + fov * fov
