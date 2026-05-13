@@ -319,8 +319,8 @@ if __name__ == "__main__":
     # 课程学习开关
     train_mode = True
     curriculum_mode = True
-    USE_CONV = False
-    FOV = 7
+    USE_CONV = True
+    FOV = 11
     distance_threshold = 1.0
     env = PathEnv(train_mode=train_mode,
                   curriculum_mode=curriculum_mode,
