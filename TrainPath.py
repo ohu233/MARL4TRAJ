@@ -78,7 +78,7 @@ def train_sac_on_pathenv(
     mode_max_count_list = []
     refine_phase_list = []
 
-    tag = "_withConv" if use_conv else ""
+    tag = ("_withConv" if use_conv else "") + ("_withCurri" if env.curriculum_mode else "")
 
     def _save_metrics_and_plots(ep):
         episodes_x = np.arange(1, len(logs) + 1)
