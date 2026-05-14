@@ -17,17 +17,17 @@ from utils.Environment import PathEnv
 from utils.tools import state_to_vector, calculate_match_rate, plt_multi_map
 
 # ========== 配置 ==========
-traj_test = pd.read_csv('data\data_lower_train_random.csv') # ('data/data_lower_test.csv')
+traj_test = pd.read_csv('data/data_lower_test_filtered.csv')
 EPISODES = len(traj_test)
 MAX_STEPS = 300
 MODEL_PATH = "PathModel\sac_actor_ep5000_withConv_withCurri.pth"
 SAVE_DIR = None
-FOV = 9
+FOV = 7
 USE_CONV = True
 
 # True: 测试时每个 episode 使用 row['mode']，不随机
 # False: 保持环境原有随机 mode 采样
-USE_ROW_MODE_FROM_DATA = False
+USE_ROW_MODE_FROM_DATA = True
 
 # 底图相关
 MAP_ROW, MAP_COL = 529, 564
