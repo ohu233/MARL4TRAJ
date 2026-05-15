@@ -101,7 +101,7 @@ class SACConfig:
     update_after: int = 1000
     update_every: int = 1
     hidden_dim: int = 256
-    target_entropy_ratio: float = 0.97
+    target_entropy_ratio: float = 0.85
     device: str = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 

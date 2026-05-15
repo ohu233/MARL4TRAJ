@@ -137,12 +137,26 @@ def run_eval_with_plots(env, agent, traj_df, episodes: int,
     x_min, y_min, x_max, y_max = 1e9, 1e9, -1e9, -1e9
     bg_cache = {}
 
+    current_id = None
+    id_buffer = []
+
+    def _flush_id_buffer():
+        if id_buffer:
+            _plot_combined_for_id(id_buffer, current_id, save_dir)
+            id_buffer.clear()
+
     for ep in range(episodes):
         # 当前使用的测试数据行
         row_idx = ep
         if row_idx >= len(traj_df):
             break
         row = traj_df.iloc[row_idx]
+        row_id = str(row['ID'])
+
+        # ID 变化时，立即生成上一个 ID 的聚合图
+        if current_id is not None and row_id != current_id:
+            _flush_id_buffer()
+        current_id = row_id
 
         mode = str(row['mode']).strip()
 
@@ -191,7 +205,15 @@ def run_eval_with_plots(env, agent, traj_df, episodes: int,
         traj_arr = np.array(traj)
         print(calculate_match_rate(traj_arr.tolist(), env.multi_mapdata))
 
-        all_trajs.append({"traj": traj_arr, "mode": str(mode)})
+        item = {
+            "traj": traj_arr,
+            "mode": str(mode),
+            "id": str(row['ID']),
+            "start_xy": traj_arr[0].copy(),
+            "end_xy": end_xy.copy(),
+        }
+        all_trajs.append(item)
+        id_buffer.append(item)
         ep_rewards.append(total_reward)
         ep_success_flags.append(success_flag)
 
@@ -294,13 +316,16 @@ def run_eval_with_plots(env, agent, traj_df, episodes: int,
 
             # Windows 下文件名不建议含冒号等符号；这里是安全的
             ep_path = os.path.join(save_dir, filename)
-            # plt.savefig(ep_path, bbox_inches='tight', dpi=200)
+            plt.savefig(ep_path, bbox_inches='tight', dpi=200)
             plt.close()
             print(f"[Episode {ep}] reward={total_reward:.3f}, success={success_flag}, saved: {ep_path}")
             if ep % 100 == 0:
                 print(f"  Current success rate: {np.mean(ep_success_flags) * 100:.2f}%")
         except Exception as e:
             print(f"Error plotting episode {ep}: {e}")
+
+    # 最后一个 ID 的聚合图
+    _flush_id_buffer()
 
     # ====== 保存 CSV ======
     df = pd.DataFrame(traj_records)
@@ -309,9 +334,114 @@ def run_eval_with_plots(env, agent, traj_df, episodes: int,
     print(f"Saved traj records CSV to: {csv_path}")
 
     print("=" * 60)
-    print(f"Avg reward   : {np.mean(ep_rewards):.3f}")
-    print(f"Success rate : {np.mean(ep_success_flags) * 100:.2f}%")
+    print("Avg reward   : {:.3f}".format(np.mean(ep_rewards)))
+    print("Success rate : {:.2f}%".format(np.mean(ep_success_flags) * 100))
     print("=" * 60)
+
+    return all_trajs
+
+
+def _plot_combined_for_id(items, tid, save_dir):
+    """为单个 ID 生成轨迹聚合图。"""
+    combined_dir = os.path.join(save_dir, "combined_by_id")
+    os.makedirs(combined_dir, exist_ok=True)
+
+    # 用该 ID 实际涉及的模式作为底图
+    used_modes = list({item["mode"] for item in items})
+    bg_img = _load_mode_background(selected_mode=used_modes)
+    height, width = bg_img.shape[0], bg_img.shape[1]
+    ratio = ((height / MAP_ROW) * (width / MAP_COL)) ** 0.5
+
+    # 收集所有点以确定整体范围
+    all_xs = []
+    all_ys = []
+    for item in items:
+        all_xs.extend(item["traj"][:, 0].tolist())
+        all_ys.extend(item["traj"][:, 1].tolist())
+
+    x_min = min(all_xs) - 2
+    x_max = max(all_xs) + 2
+    y_min = min(all_ys) - 2
+    y_max = max(all_ys) + 2
+
+    x_min_idx = int(max(0, x_min * ratio))
+    x_max_idx = int(min(width, x_max * ratio))
+    y_min_idx = int(max(0, y_min * ratio))
+    y_max_idx = int(min(height, y_max * ratio))
+
+    sliced_img = bg_img[
+        height - y_max_idx : height - y_min_idx,
+        x_min_idx : x_max_idx,
+    ]
+
+    fig, ax = plt.subplots(figsize=(8, 7))
+    ax.imshow(
+        sliced_img,
+        extent=[x_min, x_max, y_min, y_max],
+        alpha=0.5,
+    )
+
+    # 逐段绘制
+    prev_end = None
+    for item in items:
+        traj = item["traj"]
+        mode_str = item["mode"]
+        color = MODE_COLORS.get(mode_str, "C0")
+
+        ax.plot(
+            traj[:, 0], traj[:, 1],
+            marker="o", markersize=2, color=color, linewidth=1.5,
+        )
+
+        # 虚线连接上一段终点和本段起点
+        if prev_end is not None:
+            seg_start = item["start_xy"]
+            ax.plot(
+                [prev_end[0], seg_start[0]],
+                [prev_end[1], seg_start[1]],
+                linestyle="--", color="gray", linewidth=0.8, alpha=0.7,
+            )
+        prev_end = item["end_xy"]
+
+    # 整体起点：第一个路段起点
+    first_start = items[0]["start_xy"]
+    ax.scatter(
+        first_start[0], first_start[1],
+        c=MODE_COLORS.get(items[0]["mode"], "C0"),
+        marker="o", s=120, edgecolors="red", linewidths=2,
+        zorder=5, label="start",
+    )
+
+    # 整体终点：最后一个路段终点
+    last_end = items[-1]["end_xy"]
+    ax.scatter(
+        last_end[0], last_end[1],
+        c=MODE_COLORS.get(items[-1]["mode"], "C0"),
+        marker="x", s=120, linewidths=2, zorder=5, label="end",
+    )
+
+    # 图例：mode颜色 + start/end
+    handles = mode_legend_handles()
+    start_handle = Line2D(
+        [0], [0], marker="o", color="w",
+        markerfacecolor="gray", markeredgecolor="red",
+        markersize=8, linewidth=0, label="start",
+    )
+    end_handle = Line2D(
+        [0], [0], marker="x", color="gray",
+        markersize=8, linewidth=0, label="end",
+    )
+    ax.legend(handles=handles + [start_handle, end_handle], loc="best")
+
+    ax.set_xlabel("X")
+    ax.set_ylabel("Y")
+    ax.set_title(f"ID={tid}, segments={len(items)}")
+    ax.grid(True)
+
+    save_path = os.path.join(combined_dir, f"{tid}.png")
+    fig.savefig(save_path, bbox_inches="tight", dpi=150)
+    plt.close(fig)
+    print(f"[Combined] ID={tid}, {len(items)} segments → {save_path}")
 
 
 if __name__ == "__main__":
@@ -319,7 +449,7 @@ if __name__ == "__main__":
         base = os.path.splitext(os.path.basename(MODEL_PATH))[0]
         SAVE_DIR = os.path.join(base + "_test")
 
-    traj_test = pd.read_csv('data\\data_lower_test.csv')
+    traj_test = pd.read_csv('data\\data_lower_test_filtered.csv')
 
     env = load_env(traj_test, use_row_mode_from_data=USE_ROW_MODE_FROM_DATA, fov=FOV)
     agent = load_agent(env, MODEL_PATH, use_conv=USE_CONV)
