@@ -29,6 +29,7 @@ class CurriculumConfig:
     refine_reach_rate: float = 85.0
     refine_match_rate: float = 85.0
     refine_patience: int = 4
+    prev_stage_mix_ratio: float = 0.2
 
 def train_sac_on_pathenv(
     env,
@@ -216,14 +217,21 @@ def train_sac_on_pathenv(
             if can_promote and stage_idx < len(stage_trajs) - 1:
                 prev_stage = stage_idx
                 stage_idx += 1
-                env.set_curriculum_stage(stage_idx, stage_trajs[stage_idx], max_mode_count=4)
+                curr_data = stage_trajs[stage_idx]
+                prev_data = stage_trajs[prev_stage]
+                n_mix = int(len(curr_data) * curriculum_cfg.prev_stage_mix_ratio)
+                mixed = pd.concat(
+                    [curr_data, prev_data.sample(n=min(n_mix, len(prev_data)), random_state=42)],
+                    ignore_index=True,
+                )
+                env.set_curriculum_stage(stage_idx, mixed, max_mode_count=4)
                 env.set_mode_sampling_range(min_mode_count=1, max_mode_count=4)
                 stage_episode_count = 0
                 stage_stable_count = 0
                 refine_stable_count = 0
                 print(
-                    f"[Curriculum] Promote to distance stage {stage_idx + 1}/{len(stage_trajs)} (random1-4). "
-                    f"Previous stage {prev_stage + 1} data kept in memory split: {len(stage_trajs[prev_stage])} samples."
+                    f"[Curriculum] Promote to distance stage {stage_idx + 1}/{len(stage_trajs)}"
+                    f" (mixed {curriculum_cfg.prev_stage_mix_ratio*100:.0f}% from stage {prev_stage + 1}, random1-4)."
                 )
             elif (
                 can_promote
@@ -318,7 +326,7 @@ if __name__ == "__main__":
 
     # 课程学习开关
     train_mode = True
-    curriculum_mode = True
+    curriculum_mode = False
     USE_CONV =True
     FOV = 7
     distance_threshold = 1.0
@@ -341,6 +349,7 @@ if __name__ == "__main__":
         refine_reach_rate=85.0,
         refine_match_rate=70.0,
         refine_patience=4,
+        prev_stage_mix_ratio=0.2,
     )
 
     agent, logs = train_sac_on_pathenv(env, episodes=5000, curriculum_cfg=curriculum_cfg, use_conv=USE_CONV)

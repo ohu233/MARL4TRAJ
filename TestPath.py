@@ -20,14 +20,14 @@ from utils.tools import state_to_vector, calculate_match_rate, plt_multi_map
 traj_test = pd.read_csv('data/data_lower_test_filtered.csv')
 EPISODES = len(traj_test)
 MAX_STEPS = 300
-MODEL_PATH = "PathModel\sac_actor_ep5000_withConv_withCurri.pth"
+MODEL_PATH = "FOV7entropy0.85Conv\sac_actor_ep5000_withConv.pth"
 SAVE_DIR = None
 FOV = 7
 USE_CONV = True
 
 # True: 测试时每个 episode 使用 row['mode']，不随机
 # False: 保持环境原有随机 mode 采样
-USE_ROW_MODE_FROM_DATA = True
+USE_ROW_MODE_FROM_DATA = False
 
 # 底图相关
 MAP_ROW, MAP_COL = 529, 564
@@ -316,7 +316,7 @@ def run_eval_with_plots(env, agent, traj_df, episodes: int,
 
             # Windows 下文件名不建议含冒号等符号；这里是安全的
             ep_path = os.path.join(save_dir, filename)
-            plt.savefig(ep_path, bbox_inches='tight', dpi=200)
+            # plt.savefig(ep_path, bbox_inches='tight', dpi=200)
             plt.close()
             print(f"[Episode {ep}] reward={total_reward:.3f}, success={success_flag}, saved: {ep_path}")
             if ep % 100 == 0:
@@ -439,7 +439,7 @@ def _plot_combined_for_id(items, tid, save_dir):
     ax.grid(True)
 
     save_path = os.path.join(combined_dir, f"{tid}.png")
-    fig.savefig(save_path, bbox_inches="tight", dpi=150)
+    # fig.savefig(save_path, bbox_inches="tight", dpi=150)
     plt.close(fig)
     print(f"[Combined] ID={tid}, {len(items)} segments → {save_path}")
 
