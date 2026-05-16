@@ -294,12 +294,13 @@ if __name__ == "__main__":
         traj["velocity"] = traj["velocity"].fillna(0.0)
 
     env = ModeEnv(
-        model_path="PathModel/PathModel.pth",  # 已训练好的Path策略
+        model_path="PathModel/sac_actor_ep5000_withConv_withCurri.pth",  # 已训练好的Path策略
         mapdata=mapdata,
         traj=traj,
         train_mode=True,
-        fov=5,
+        fov=7,
         distance_threshold=1.0,
+        use_conv=True,
     )
 
     dqn_cfg = DQNConfig(
