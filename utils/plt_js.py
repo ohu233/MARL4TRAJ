@@ -2,12 +2,13 @@ import math
 import pickle
 from itertools import combinations
 
-import matplotlib.image as mpimg
 import matplotlib.pyplot as plt
 import numpy as np
 from PIL import Image
 
 from utils.tools import mapdata_to_modelmatrix
+from utils.geo_utils import grid_to_mercator, full_grid_bounds_mercator
+from utils.basemap import set_full_extent
 
 Image.MAX_IMAGE_PIXELS = None
 
@@ -25,9 +26,6 @@ mode_colors = {
     "GSD": "green",
     "TS": "red",
 }
-
-bg_path = r"figur\jiangsu\js.jpg"
-bg_img = mpimg.imread(bg_path)
 
 # 3) precompute points for each mode
 mode_points = {}
@@ -48,16 +46,14 @@ for r in range(1, len(modes) + 1):
 for combo in all_combos:
     fig, ax = plt.subplots(figsize=(20, 20))
 
-    # same background style as your original code
-    ax.imshow(bg_img, extent=[0, h, 0, w], aspect='equal', alpha=1)
+    set_full_extent(ax)
 
     # overlay all modes in this combination
     for mode in combo:
-        x, y = mode_points[mode]
-        ax.scatter(x, y, s=1 / 100, alpha=1, c=mode_colors[mode], marker='o')
+        grid_xs, grid_ys = mode_points[mode]
+        merc_x, merc_y = grid_to_mercator(np.array(grid_xs), np.array(grid_ys))
+        ax.scatter(merc_x, merc_y, s=1 / 100, alpha=1, c=mode_colors[mode], marker='o')
 
-    ax.set_xlim(0, h)
-    ax.set_ylim(0, w)
     ax.axis('off')
 
     combo_name = "+".join(combo)

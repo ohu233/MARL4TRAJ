@@ -200,47 +200,48 @@ def eval(traj_df, method_eval):
     # 随机抽取不同模式的轨迹进行可视化
 
     import matplotlib.pyplot as plt
-    import matplotlib.image as mpimg
+    from utils.geo_utils import grid_to_mercator, grid_bounds_to_mercator
+    from utils.basemap import add_osm_basemap, USE_OSM_BASEMAP
+
     sample_trajs = traj_df.groupby('mode').apply(lambda x: x.sample(1, random_state=42)).reset_index(drop=True)
 
-
     for mode in sample_trajs['mode'].unique():
-        backimg_path = 'figur/{}_plot_js.png'.format(mode)  # 529x564 map
-        background_img = mpimg.imread(backimg_path)
-        height, width = background_img.shape[0], background_img.shape[1]
-        ratio = ((height / map_row) * (width / map_col)) ** 0.5
-
-        plt.figure(figsize=(8, 8))
+        fig, ax = plt.subplots(figsize=(8, 8))
         mode_trajs = sample_trajs[sample_trajs['mode'] == mode]
 
+        # 收集所有预测路径点以确定范围
+        all_xs, all_ys = [], []
+        pred_paths = {}
         for idx, traj in mode_trajs.iterrows():
-            # 将地图底图切片到预测轨迹的范围，增强可视化效果
-            pred_path = rule_based_method(traj, mode_matrix_dict)
-            x_min, x_max = min(x for x, y in pred_path)-2, max(x for x, y in pred_path)+2
-            y_min, y_max = min(y for x, y in pred_path)-2, max(y for x, y in pred_path)+2
+            pred_path = method_eval(traj, mode_matrix_dict)
+            pred_paths[idx] = pred_path
+            xs, ys = zip(*pred_path)
+            all_xs.extend(xs)
+            all_ys.extend(ys)
 
-            x_min_idx = int(x_min * ratio)
-            x_max_idx = int(x_max * ratio)
-            y_min_idx = int(y_min * ratio)
-            y_max_idx = int(y_max * ratio)
+        x_min, x_max = min(all_xs) - 2, max(all_xs) + 2
+        y_min, y_max = min(all_ys) - 2, max(all_ys) + 2
 
-            x_min_idx = max(0, x_min_idx)
-            x_max_idx = min(background_img.shape[0], x_max_idx)
-            y_min_idx = max(0, y_min_idx)
-            y_max_idx = min(background_img.shape[1], y_max_idx)
+        mxmin, mxmax, mymin, mymax = grid_bounds_to_mercator(x_min, x_max, y_min, y_max)
+        ax.set_xlim(mxmin, mxmax)
+        ax.set_ylim(mymin, mymax)
 
-            sliced_background_img = background_img[height - y_max_idx: height - y_min_idx, x_min_idx:x_max_idx]
+        if USE_OSM_BASEMAP:
+            add_osm_basemap(ax, alpha=0.5)
 
+        for idx, pred_path in pred_paths.items():
+            traj = mode_trajs.loc[idx]
+            xs, ys = zip(*pred_path)
+            merc_x, merc_y = grid_to_mercator(np.array(xs), np.array(ys))
+            ax.plot(merc_x, merc_y, marker='o',
+                    label=f'Traj ID {traj["ID"]}', markersize=1, linewidth=2)
 
-            x_coords, y_coords = zip(*pred_path)
-            plt.plot(y_coords, x_coords, marker = 'o', label=f'Traj ID {traj["ID"]}', markersize = 1, linewidth = 2)
-            plt.imshow(background_img, extent=[0, height, 0, width], aspect='equal', alpha=0.5)
-            plt.title(f'Predicted Trajectories for Mode {mode}')
-            plt.xlabel('X')
-            plt.ylabel('Y')
-            plt.legend()
-            plt.grid(True)
-            plt.show(figsize=(40, 32))
+        ax.set_title(f'Predicted Trajectories for Mode {mode}')
+        ax.set_xlabel('Web Mercator X')
+        ax.set_ylabel('Web Mercator Y')
+        ax.legend()
+        ax.grid(True)
+        plt.show()
 
     return new_traj_df, match_rate_dict
 

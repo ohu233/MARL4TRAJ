@@ -3,10 +3,12 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import pickle
 from typing import Dict, List, Tuple
-import matplotlib.image as mpimg
 import warnings
 from PIL import Image
 warnings.simplefilter("ignore", Image.DecompressionBombWarning)
+
+from utils.geo_utils import grid_to_mercator, full_grid_bounds_mercator
+from utils.basemap import set_ax_extent, set_full_extent, USE_OSM_BASEMAP
 
 MODE_LIST = ["GSD", "GG", "TS", "TG"]
 
@@ -144,38 +146,29 @@ def plt_multi_map(modes: List[str]):
         "TS": "red",
     }
 
-    # 固定底图，不改
-    bg_img = r"figur\jiangsu\js.jpg"
-
-    # 用任意一个 mode 的矩阵拿尺寸
     ref_matrix = np.array(matrice["TG"])
     x_max, y_max = ref_matrix.shape[0], ref_matrix.shape[1]
 
     fig, ax = plt.subplots(figsize=(20, 20))
-    ax.imshow(
-        mpimg.imread(bg_img),
-        extent=[0, x_max, 0, y_max],
-        aspect="equal",
-        alpha=1
-    )
 
     for mode in modes:
         matrix = np.array(matrice[mode])
         points = np.argwhere(matrix == 1)
         if points.size > 0:
-            x = points[:, 0]
-            y = points[:, 1]
+            grid_x = points[:, 0]
+            grid_y = points[:, 1]
+            merc_x, merc_y = grid_to_mercator(grid_x, grid_y)
             ax.scatter(
-                x, y,
-                s=5,      # 和 plt_js 一致
+                merc_x, merc_y,
+                s=5,
                 c=mode_colors[mode],
                 marker='+',
                 linewidths=0.3,
                 alpha=0.7
             )
 
-    ax.set_xlim(0, x_max)
-    ax.set_ylim(0, y_max)
+    set_full_extent(ax)
     ax.axis("off")
     plt.tight_layout()
     plt.savefig('intermediate_fig.png')
+    return fig, ax

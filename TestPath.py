@@ -6,7 +6,6 @@ import numpy as np
 import pandas as pd
 import torch
 import matplotlib.pyplot as plt
-import matplotlib.image as mpimg
 from matplotlib.lines import Line2D
 
 from utils.SoftActorCritic import (
@@ -15,23 +14,21 @@ from utils.SoftActorCritic import (
 )
 from utils.Environment import PathEnv
 from utils.tools import state_to_vector, calculate_match_rate, plt_multi_map
+from utils.geo_utils import grid_to_mercator, grid_bounds_to_mercator
+from utils.basemap import add_osm_basemap, USE_OSM_BASEMAP
 
 # ========== 配置 ==========
 traj_test = pd.read_csv('data/data_lower_test_filtered.csv')
 EPISODES = len(traj_test)
 MAX_STEPS = 300
-MODEL_PATH = "FOV7entropy0.85Conv\sac_actor_ep5000_withConv.pth"
+MODEL_PATH = "PathModel/sac_actor_ep5000_withConv_withCurri.pth"
 SAVE_DIR = None
 FOV = 7
 USE_CONV = True
 
 # True: 测试时每个 episode 使用 row['mode']，不随机
 # False: 保持环境原有随机 mode 采样
-USE_ROW_MODE_FROM_DATA = False
-
-# 底图相关
-MAP_ROW, MAP_COL = 529, 564
-BACKIMG_PATH = "figur/all_modes_js.png"
+USE_ROW_MODE_FROM_DATA = True
 
 MODE_COLORS = {
     "TG": "orange",
@@ -40,52 +37,10 @@ MODE_COLORS = {
     "TS": "red",
 }
 
-FIGURE_DIR = "figure"
-DEFAULT_BACKIMG_PATH = "figur/all_modes_js.png"
 MODE_ORDER = ["TG", "GG", "GSD", "TS"]
 
 
-def _normalize_modes(selected_mode, fallback_mode=None):
-    if selected_mode is None:
-        modes = [fallback_mode] if fallback_mode is not None else []
-    elif isinstance(selected_mode, (list, tuple, np.ndarray, set)):
-        modes = [str(m).strip() for m in selected_mode]
-    else:
-        modes = [str(selected_mode).strip()]
 
-    valid = [m for m in modes if m in MODE_ORDER]
-    if not valid and fallback_mode in MODE_ORDER:
-        valid = [fallback_mode]
-
-    # 按固定顺序排序，和 figure 文件命名保持一致
-    valid = sorted(set(valid), key=lambda x: MODE_ORDER.index(x))
-    return valid
-
-
-def _load_mode_background(selected_mode, fallback_mode=None, cache=None):
-    if cache is None:
-        cache = {}
-
-    modes = _normalize_modes(selected_mode, fallback_mode=fallback_mode)
-    if not modes:
-        key = ("__default__",)
-    else:
-        key = tuple(modes)
-
-    if key in cache:
-        return cache[key]
-
-    if modes:
-        fig_name = "+".join(modes) + ".png"
-        candidate = os.path.join(FIGURE_DIR, fig_name)
-        if os.path.exists(candidate):
-            cache[key] = mpimg.imread(candidate)
-            return cache[key]
-
-    # 回退到底图
-    cache[key] = mpimg.imread(DEFAULT_BACKIMG_PATH)
-    print(f"[WARN] 背景图不存在，使用默认底图: modes={modes}")
-    return cache[key]
 
 def mode_legend_handles():
     return [
@@ -133,9 +88,6 @@ def run_eval_with_plots(env, agent, traj_df, episodes: int,
     ep_rewards = []
     ep_success_flags = []
     traj_records = []
-
-    x_min, y_min, x_max, y_max = 1e9, 1e9, -1e9, -1e9
-    bg_cache = {}
 
     current_id = None
     id_buffer = []
@@ -194,11 +146,6 @@ def run_eval_with_plots(env, agent, traj_df, episodes: int,
 
             state = next_state
 
-            x_min = min(x_min, actual_pos[0])
-            x_max = max(x_max, actual_pos[0])
-            y_min = min(y_min, actual_pos[1])
-            y_max = max(y_max, actual_pos[1])
-
             if done:
                 break
 
@@ -231,92 +178,65 @@ def run_eval_with_plots(env, agent, traj_df, episodes: int,
         # ====== 画当前 episode 的带底图轨迹（用 actual_pos） ======
         try:
             mode_str = str(mode).strip()
-            episode_bg = _load_mode_background(
-                selected_mode=getattr(env, "selected_mode", None),
-                fallback_mode=mode_str,
-                cache=bg_cache,
-            )
-
-            height, width = episode_bg.shape[0], episode_bg.shape[1]
-            ratio = ((height / MAP_ROW) * (width / MAP_COL)) ** 0.5
             xs = traj_arr[:, 0]
             ys = traj_arr[:, 1]
             x_min_local, x_max_local = xs.min() - 2, xs.max() + 2
             y_min_local, y_max_local = ys.min() - 2, ys.max() + 2
 
-            x_min_idx = int(max(0, x_min_local * ratio))
-            x_max_idx = int(min(width,  x_max_local * ratio))
-            y_min_idx = int(max(0, y_min_local * ratio))
-            y_max_idx = int(min(height, y_max_local * ratio))
+            fig, ax = plt.subplots(figsize=(6, 5))
 
-            sliced_img = episode_bg[
-                height - y_max_idx: height - y_min_idx,
-                x_min_idx:x_max_idx
-            ]
-
-            plt.figure(figsize=(6, 5))
-            plt.imshow(
-                sliced_img,
-                extent=[x_min_local, x_max_local, y_min_local, y_max_local],
-                alpha=0.5
+            mxmin, mxmax, mymin, mymax = grid_bounds_to_mercator(
+                x_min_local, x_max_local, y_min_local, y_max_local
             )
+            ax.set_xlim(mxmin, mxmax)
+            ax.set_ylim(mymin, mymax)
 
-            mode_str = str(mode).strip()
+            if USE_OSM_BASEMAP:
+                add_osm_basemap(ax, alpha=0.8)
+            ax.set_aspect("equal")
+
             traj_color = MODE_COLORS.get(mode_str, "C0")
+            merc_x, merc_y = grid_to_mercator(xs, ys)
+            ax.plot(merc_x, merc_y, color=traj_color, alpha=0.35, linewidth=1.5)
 
-            plt.plot(traj_arr[:, 0], traj_arr[:, 1],
-                     marker='o', markersize=2, color=traj_color)
+            start_mx, start_my = grid_to_mercator(traj_arr[0, 0], traj_arr[0, 1])
+            end_mx, end_my = grid_to_mercator(end_xy[0], end_xy[1])
+            agent_end_mx, agent_end_my = grid_to_mercator(traj_arr[-1, 0], traj_arr[-1, 1])
 
-            # start
-            plt.scatter(traj_arr[0, 0], traj_arr[0, 1],
-            c=traj_color, marker='o', s=100,
-            edgecolors='red', linewidths=2, label='start')
-
-            # end
-            plt.scatter(end_xy[0], end_xy[1],
-            c=traj_color, marker='x', s=120,
-            linewidths=2, label='end')
-
-            # agent end
-            agent_end = traj_arr[-1]
-            plt.scatter(agent_end[0], agent_end[1],
-            c='black', marker='^', s=60, linewidths=1.5, label='agent_end')
+            ax.scatter(start_mx, start_my,
+                       c=traj_color, marker='o', s=18,
+                       edgecolors='red', linewidths=1.5, label='start')
+            ax.scatter(end_mx, end_my,
+                       c=traj_color, marker='x', s=22,
+                       linewidths=1.5, label='end')
+            ax.scatter(agent_end_mx, agent_end_my,
+                       c='black', marker='^', s=15, linewidths=1, label='agent_end')
 
             start_handle = Line2D([0], [0], marker='o', color='w', label='start',
                       markerfacecolor=traj_color, markeredgecolor='red',
-                      markersize=8, linewidth=0)
+                      markersize=5, linewidth=0)
             end_handle = Line2D([0], [0], marker='x', color=traj_color, label='end',
-                    markersize=8, linewidth=0)
+                    markersize=5, linewidth=0)
 
-            plt.legend(handles=mode_legend_handles() + [start_handle, end_handle], loc='best')
+            ax.legend(handles=mode_legend_handles() + [start_handle, end_handle], loc='best',
+                      fontsize=7)
 
-            plt.xlabel("X")
-            plt.ylabel("Y")
-            plt.title(
+            ax.set_xlabel("Web Mercator X")
+            ax.set_ylabel("Web Mercator Y")
+            ax.set_title(
                 f"Ep {ep}, "
                 f"Succ={success_flag == 1}, Mode={mode}, "
                 f"Selected Mode={env.selected_mode}"
             )
-            plt.grid(True)
-            plt.legend()
-
-            # 起终点坐标（实际坐标）
-            sx, sy = traj_arr[0, 0], traj_arr[0, 1]
-            ex, ey = end_xy[0], end_xy[1]
-
-            # 文件名里避免小数点过长/非法字符，统一保留2位并把负号保留
             filename = (
                 f"ep_{ep:04d}"
                 f"_succ_{success_flag}"
                 f"_match_{calculate_match_rate(traj_arr.tolist(), env.multi_mapdata):.2f}"
-                # f"_S({sx:.2f},{sy:.2f})"
-                # f"_E({ex:.2f},{ey:.2f})"
                 ".png"
             )
 
-            # Windows 下文件名不建议含冒号等符号；这里是安全的
             ep_path = os.path.join(save_dir, filename)
-            # plt.savefig(ep_path, bbox_inches='tight', dpi=200)
+            plt.savefig(ep_path, bbox_inches='tight', dpi=200)
             plt.close()
             print(f"[Episode {ep}] reward={total_reward:.3f}, success={success_flag}, saved: {ep_path}")
             if ep % 100 == 0:
@@ -346,12 +266,6 @@ def _plot_combined_for_id(items, tid, save_dir):
     combined_dir = os.path.join(save_dir, "combined_by_id")
     os.makedirs(combined_dir, exist_ok=True)
 
-    # 用该 ID 实际涉及的模式作为底图
-    used_modes = list({item["mode"] for item in items})
-    bg_img = _load_mode_background(selected_mode=used_modes)
-    height, width = bg_img.shape[0], bg_img.shape[1]
-    ratio = ((height / MAP_ROW) * (width / MAP_COL)) ** 0.5
-
     # 收集所有点以确定整体范围
     all_xs = []
     all_ys = []
@@ -364,22 +278,14 @@ def _plot_combined_for_id(items, tid, save_dir):
     y_min = min(all_ys) - 2
     y_max = max(all_ys) + 2
 
-    x_min_idx = int(max(0, x_min * ratio))
-    x_max_idx = int(min(width, x_max * ratio))
-    y_min_idx = int(max(0, y_min * ratio))
-    y_max_idx = int(min(height, y_max * ratio))
-
-    sliced_img = bg_img[
-        height - y_max_idx : height - y_min_idx,
-        x_min_idx : x_max_idx,
-    ]
-
     fig, ax = plt.subplots(figsize=(8, 7))
-    ax.imshow(
-        sliced_img,
-        extent=[x_min, x_max, y_min, y_max],
-        alpha=0.5,
-    )
+    mxmin, mxmax, mymin, mymax = grid_bounds_to_mercator(x_min, x_max, y_min, y_max)
+    ax.set_xlim(mxmin, mxmax)
+    ax.set_ylim(mymin, mymax)
+
+    if USE_OSM_BASEMAP:
+        add_osm_basemap(ax, alpha=0.5)
+    ax.set_aspect("equal")
 
     # 逐段绘制
     prev_end = None
@@ -388,58 +294,58 @@ def _plot_combined_for_id(items, tid, save_dir):
         mode_str = item["mode"]
         color = MODE_COLORS.get(mode_str, "C0")
 
-        ax.plot(
-            traj[:, 0], traj[:, 1],
-            marker="o", markersize=2, color=color, linewidth=1.5,
-        )
+        merc_x, merc_y = grid_to_mercator(traj[:, 0], traj[:, 1])
+        ax.plot(merc_x, merc_y, color=color, alpha=0.35, linewidth=1.5)
 
-        # 虚线连接上一段终点和本段起点
+        # 每个分段的 OD
+        od_x = np.array([traj[0, 0], traj[-1, 0]])
+        od_y = np.array([traj[0, 1], traj[-1, 1]])
+        od_mx, od_my = grid_to_mercator(od_x, od_y)
+        ax.scatter(od_mx[0], od_my[0], c=color, marker='o', s=12, zorder=4)
+        ax.scatter(od_mx[1], od_my[1], c=color, marker='x', s=14, zorder=4)
+
         if prev_end is not None:
             seg_start = item["start_xy"]
-            ax.plot(
-                [prev_end[0], seg_start[0]],
-                [prev_end[1], seg_start[1]],
-                linestyle="--", color="gray", linewidth=0.8, alpha=0.7,
-            )
+            pmx, pmy = grid_to_mercator(prev_end[0], prev_end[1])
+            smx, smy = grid_to_mercator(seg_start[0], seg_start[1])
+            ax.plot([pmx, smx], [pmy, smy],
+                    linestyle="--", color="gray", linewidth=0.8, alpha=0.7)
         prev_end = item["end_xy"]
 
     # 整体起点：第一个路段起点
     first_start = items[0]["start_xy"]
-    ax.scatter(
-        first_start[0], first_start[1],
-        c=MODE_COLORS.get(items[0]["mode"], "C0"),
-        marker="o", s=120, edgecolors="red", linewidths=2,
-        zorder=5, label="start",
-    )
+    fs_mx, fs_my = grid_to_mercator(first_start[0], first_start[1])
+    ax.scatter(fs_mx, fs_my,
+               c=MODE_COLORS.get(items[0]["mode"], "C0"),
+               marker="o", s=18, edgecolors="red", linewidths=1.5,
+               zorder=5, label="start")
 
     # 整体终点：最后一个路段终点
     last_end = items[-1]["end_xy"]
-    ax.scatter(
-        last_end[0], last_end[1],
-        c=MODE_COLORS.get(items[-1]["mode"], "C0"),
-        marker="x", s=120, linewidths=2, zorder=5, label="end",
-    )
+    le_mx, le_my = grid_to_mercator(last_end[0], last_end[1])
+    ax.scatter(le_mx, le_my,
+               c=MODE_COLORS.get(items[-1]["mode"], "C0"),
+               marker="x", s=22, linewidths=1.5, zorder=5, label="end")
 
     # 图例：mode颜色 + start/end
     handles = mode_legend_handles()
     start_handle = Line2D(
         [0], [0], marker="o", color="w",
         markerfacecolor="gray", markeredgecolor="red",
-        markersize=8, linewidth=0, label="start",
+        markersize=5, linewidth=0, label="start",
     )
     end_handle = Line2D(
         [0], [0], marker="x", color="gray",
-        markersize=8, linewidth=0, label="end",
+        markersize=5, linewidth=0, label="end",
     )
-    ax.legend(handles=handles + [start_handle, end_handle], loc="best")
+    ax.legend(handles=handles + [start_handle, end_handle], loc="best", fontsize=7)
 
     ax.set_xlabel("X")
     ax.set_ylabel("Y")
     ax.set_title(f"ID={tid}, segments={len(items)}")
-    ax.grid(True)
 
     save_path = os.path.join(combined_dir, f"{tid}.png")
-    # fig.savefig(save_path, bbox_inches="tight", dpi=150)
+    fig.savefig(save_path, bbox_inches="tight", dpi=150)
     plt.close(fig)
     print(f"[Combined] ID={tid}, {len(items)} segments → {save_path}")
 
