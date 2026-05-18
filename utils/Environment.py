@@ -8,6 +8,19 @@ from utils.SoftActorCritic import DiscreteSACAgent, SACConfig
 from utils.tools import mapdata_to_modelmatrix, get_patch, state_to_vector, calculate_match_rate
 
 
+
+"""TODO
+1. 多路网环境下避免换乘应该安排在下层PathEnv中实现，而不是ModeEnv中：
+    - 安排在上层容易使上层任务耦合过度，奖励设计等趋于复杂
+    - 安排在下层可以增强可解释性，更符合直觉，并能够避免下层过于类似搜索算法，且没有搜索算法性能优秀，失去强化学习的意义
+    - 安排在下层可提高扩展性，后续引入换乘点等概念时，更容易在下层实现，而不需要修改上层逻辑
+2. ModeEnv的逻辑需要大改：
+    - 上层最好选择一次性输入一整条轨迹作为一个ep，对一整条轨迹进行模式选择
+    - 奖励设计重点考虑（路径长度加权）：综合所选路网匹配度（判断是否匹配）、成功率、速度匹配、最大路网匹配度（或1，2位路网匹配度之差：越大说明越高概率是单模式），换乘次数（错误路网下，换乘次数一般多于正确路网）、模式数量惩罚
+"""
+
+
+
 # global variables
 dxdy_dict = {0: (1, 0), 1: (0, 1), 2: (-1, 0), 3: (0, -1)}
 modelist = ['GSD', 'GG', 'TS', 'TG']
@@ -246,7 +259,6 @@ class ModeEnv:
         self.fov = fov
         self.distance_threshold = distance_threshold
         self.use_conv = use_conv
-        self.max_mode_steps = 50
 
         self.no_change_patience = 5      # 连续多少步不变就提前结束
         self.no_change_streak = 0
@@ -268,74 +280,6 @@ class ModeEnv:
         path_agent.actor.eval()
         self.path_agent = path_agent
 
-    def _build_mode_speed_stats(self):
-        """
-        基于轨迹数据估计每个 mode 的速度分布参数（均值/标准差）。
-        若某 mode 样本不足，则回退到全局统计量。
-        """
-        stats = {}
-        fallback_mean = 0.0
-        fallback_std = 1.0
-
-        if self.traj is None or len(self.traj) == 0:
-            return {m: {"mean": fallback_mean, "std": fallback_std} for m in modelist}
-
-        if "mode" not in self.traj.columns or "velocity" not in self.traj.columns:
-            return {m: {"mean": fallback_mean, "std": fallback_std} for m in modelist}
-
-        mode_col = self.traj["mode"].astype(str).str.strip()
-        vel_col = pd.to_numeric(self.traj["velocity"], errors="coerce")
-
-        global_vel = vel_col.dropna()
-        if len(global_vel) > 0:
-            fallback_mean = float(global_vel.mean())
-            global_std = float(global_vel.std(ddof=0))
-            if np.isfinite(global_std) and global_std > 1e-6:
-                fallback_std = global_std
-
-        for m in modelist:
-            v = vel_col[mode_col == m].dropna().to_numpy(dtype=np.float32)
-            if len(v) == 0:
-                mu = fallback_mean
-                std = fallback_std
-            else:
-                mu = float(np.mean(v))
-                std = float(np.std(v))
-                if (not np.isfinite(std)) or std <= 1e-6:
-                    std = fallback_std
-
-            stats[m] = {"mean": mu, "std": std}
-
-        return stats
-
-    def _speed_deviation_reward(self, cur_mask, velocity: float) -> float:
-        """
-        速度奖励：按当前所选 mode 对应高斯分布打分。
-        score = exp(-0.5 * z^2), z=(v-mu)/sigma
-        再线性映射到 [-1, 1]，偏离越大惩罚越强。
-        """
-        selected_modes = self._mask_to_modes(cur_mask)
-        if len(selected_modes) == 0:
-            return 0.0
-
-        rewards = []
-        for m in selected_modes:
-            st = self.mode_speed_stats.get(m)
-            if st is None:
-                continue
-
-            mu = float(st.get("mean", 0.0))
-            sigma = float(st.get("std", 1.0))
-            sigma = max(sigma, 1e-6)
-
-            z = (float(velocity) - mu) / sigma
-            gaussian_score = float(np.exp(-0.5 * (z ** 2)))
-            rewards.append(2.0 * gaussian_score - 1.0)
-
-        if len(rewards) == 0:
-            return 0.0
-
-        return float(np.mean(rewards))
 
     def _mask_to_modes(self, mask):
         return [modelist[i] for i, v in enumerate(mask) if int(v) == 1]
@@ -402,6 +346,7 @@ class ModeEnv:
             traj=traj_one,
             FOV=self.fov,
             distance_threshold=self.distance_threshold,
+            train_mode = False
         )
 
         s = env.reset()
@@ -458,7 +403,6 @@ class ModeEnv:
             if len(candidate_modes) == 0:
                 trans_times += 1
                 candidate_modes = set(curr_modes)
-
 
         # 在已选择的混合路网的综合匹配度
         multi_match_rate = float(calculate_match_rate(traj_points, np.asarray(env.multi_mapdata)))
