@@ -326,7 +326,7 @@ if __name__ == "__main__":
 
     # 课程学习开关
     train_mode = True
-    curriculum_mode = False
+    curriculum_mode = True
     USE_CONV =True
     FOV = 7
     distance_threshold = 1.0

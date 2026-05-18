@@ -101,7 +101,12 @@ class PathEnv:
                       'patch':(get_patch(self.multi_mapdata, self.locx_start, self.locy_start, size=self.FOV)), # 邻域信息
                       'visit_count': 0
                       }
-        
+
+        self.prev_active_modes = {
+            mode for mode in self.selected_mode
+            if self.mapdata[mode][int(self.locx_start)][int(self.locy_start)] == 1
+        }
+
         return self.state
 
     def split_traj_by_distance(self, num_stages: int = 4):
@@ -204,6 +209,14 @@ class PathEnv:
         # 更新绝对坐标
         self.locx_start += dxdy_dict[action][0]
         self.locy_start += dxdy_dict[action][1]
+
+        curr_active_modes = {
+            mode for mode in self.selected_mode
+            if self.mapdata[mode][int(self.locx_start)][int(self.locy_start)] == 1
+        }
+        if self.prev_active_modes and curr_active_modes.isdisjoint(self.prev_active_modes):
+            reward -= 2
+        self.prev_active_modes = curr_active_modes
 
         # 更新上一步剩余距离向量
         self.state['previous_remaining_distance'] = self.state['remaining_distance']
@@ -346,7 +359,6 @@ class ModeEnv:
             traj=traj_one,
             FOV=self.fov,
             distance_threshold=self.distance_threshold,
-            train_mode = False
         )
 
         s = env.reset()
