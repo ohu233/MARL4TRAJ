@@ -286,7 +286,6 @@ if __name__ == "__main__":
         mapdata = pickle.load(f)
 
     traj = pd.read_csv("data/data_lower_train_ordered.csv")
-    traj = traj.sample(frac=1, random_state=42).reset_index(drop=True)
 
     # 兼容没有velocity列的数据
     if "velocity" not in traj.columns:
