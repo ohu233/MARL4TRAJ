@@ -34,7 +34,7 @@ USE_ROW_MODE_FROM_DATA = False
 # True: 使用 OSM 瓦片底图（需联网，坐标用 Web Mercator）
 # False: 使用 figure 文件夹路网图作为底图（离线，坐标用 grid）
 USE_OSM_BASEMAP = True
-
+SAVE_FIGURES = True
 # ========== figure 底图相关（仅 USE_OSM_BASEMAP=False 时生效） ==========
 MAP_ROW, MAP_COL = 529, 564
 FIGURE_DIR = "figure"
@@ -312,7 +312,8 @@ def _plot_episode_osm(traj_arr, end_xy, mode_str, ep, success_flag,
         ".png"
     )
     ep_path = os.path.join(save_dir, filename)
-    plt.savefig(ep_path, bbox_inches='tight', dpi=200)
+    if SAVE_FIGURES:
+        plt.savefig(ep_path, bbox_inches='tight', dpi=200)
     plt.close()
     print(f"[Episode {ep}] reward saved: {ep_path}")
 
@@ -388,7 +389,8 @@ def _plot_episode_figure(traj_arr, end_xy, mode_str, ep, success_flag,
         ".png"
     )
     ep_path = os.path.join(save_dir, filename)
-    plt.savefig(ep_path, bbox_inches='tight', dpi=200)
+    if SAVE_FIGURES:
+        plt.savefig(ep_path, bbox_inches='tight', dpi=200)
     plt.close()
     print(f"[Episode {ep}] reward saved: {ep_path}")
 
@@ -478,7 +480,8 @@ def _plot_combined_osm(items, tid, x_min, x_max, y_min, y_max, combined_dir):
     ax.set_title(f"ID={tid}, segments={len(items)}")
 
     save_path = os.path.join(combined_dir, f"{tid}.png")
-    fig.savefig(save_path, bbox_inches="tight", dpi=150)
+    if SAVE_FIGURES:
+        fig.savefig(save_path, bbox_inches="tight", dpi=150)
     plt.close(fig)
     print(f"[Combined] ID={tid}, {len(items)} segments → {save_path}")
 
@@ -560,7 +563,8 @@ def _plot_combined_figure(items, tid, x_min, x_max, y_min, y_max, combined_dir):
     ax.grid(True)
 
     save_path = os.path.join(combined_dir, f"{tid}.png")
-    fig.savefig(save_path, bbox_inches="tight", dpi=150)
+    if SAVE_FIGURES:
+        fig.savefig(save_path, bbox_inches="tight", dpi=150)
     plt.close(fig)
     print(f"[Combined] ID={tid}, {len(items)} segments → {save_path}")
 
