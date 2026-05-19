@@ -51,7 +51,7 @@ def train_sac_on_pathenv(
 
     action_dim = 4
     agent = DiscreteSACAgent(vec_dim=12, fov=env.FOV, action_dim=action_dim,
-                              cfg=cfg, use_conv=use_conv)
+                              cfg=cfg, use_conv=use_conv, in_channels=5)
 
     stage_trajs = env.split_traj_by_distance(curriculum_cfg.num_stages)
     stage_idx = 0

@@ -29,12 +29,12 @@ USE_CONV = True
 
 # True: 测试时每个 episode 使用 row['mode']，不随机
 # False: 保持环境原有随机 mode 采样
-USE_ROW_MODE_FROM_DATA = False
+USE_ROW_MODE_FROM_DATA = True
 
 # True: 使用 OSM 瓦片底图（需联网，坐标用 Web Mercator）
 # False: 使用 figure 文件夹路网图作为底图（离线，坐标用 grid）
-USE_OSM_BASEMAP = True
-SAVE_FIGURES = True
+USE_OSM_BASEMAP = False
+SAVE_FIGURES = False
 # ========== figure 底图相关（仅 USE_OSM_BASEMAP=False 时生效） ==========
 MAP_ROW, MAP_COL = 529, 564
 FIGURE_DIR = "figure"
@@ -119,7 +119,7 @@ def load_agent(env, model_path: str, use_conv: bool = True):
     device = torch.device(cfg.device)
 
     agent = DiscreteSACAgent(vec_dim=12, fov=env.FOV, action_dim=4,
-                              cfg=cfg, use_conv=use_conv)
+                              cfg=cfg, use_conv=use_conv, in_channels=5)
     state_dict = torch.load(model_path, map_location=device)
     agent.actor.load_state_dict(state_dict)
     agent.actor.eval()

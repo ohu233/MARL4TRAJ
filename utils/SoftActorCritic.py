@@ -45,26 +45,27 @@ class MLP(nn.Module):
 
 class StateEncoder(nn.Module):
     """将 flat state 拆分为 vector 特征 + patch，可选 CNN 编码 patch"""
-    def __init__(self, vec_dim: int = 12, fov: int = 7, use_conv: bool = True):
+    def __init__(self, vec_dim: int = 12, fov: int = 7, use_conv: bool = True, in_channels: int = 5):
         super().__init__()
         self.vec_dim = vec_dim
         self.fov = fov
         self.use_conv = use_conv
+        self.in_channels = in_channels
 
         if use_conv:
             self.conv = nn.Sequential(
-                nn.Conv2d(1, 8, 3, padding=1), nn.ReLU(),
+                nn.Conv2d(in_channels, 8, 3, padding=1), nn.ReLU(),
                 nn.Conv2d(8, 16, 3, padding=1, stride=2), nn.ReLU(),
             )
             h = (fov + 1) // 2
             self.out_dim = vec_dim + 16 * h * h
         else:
             self.conv = None
-            self.out_dim = vec_dim + fov * fov
+            self.out_dim = vec_dim + in_channels * fov * fov
 
     def forward(self, x):
         vec = x[:, :self.vec_dim]
-        patch = x[:, self.vec_dim:].view(-1, 1, self.fov, self.fov)
+        patch = x[:, self.vec_dim:].view(-1, self.in_channels, self.fov, self.fov)
 
         if self.use_conv and self.conv is not None:
             patch_feat = self.conv(patch).flatten(1)
@@ -76,9 +77,9 @@ class StateEncoder(nn.Module):
 
 class PolicyNet(nn.Module):
     """StateEncoder + MLP head，用于 actor / Q 网络"""
-    def __init__(self, vec_dim: int, fov: int, out_dim: int, hidden_dim: int = 256, use_conv: bool = True):
+    def __init__(self, vec_dim: int, fov: int, out_dim: int, hidden_dim: int = 256, use_conv: bool = True, in_channels: int = 5):
         super().__init__()
-        self.encoder = StateEncoder(vec_dim, fov, use_conv)
+        self.encoder = StateEncoder(vec_dim, fov, use_conv, in_channels)
         self.head = nn.Sequential(
             nn.Linear(self.encoder.out_dim, hidden_dim), nn.ReLU(),
             nn.Linear(hidden_dim, hidden_dim), nn.ReLU(),
@@ -107,13 +108,13 @@ class SACConfig:
 
 class DiscreteSACAgent:
     def __init__(self, vec_dim: int = 12, fov: int = 5, action_dim: int = 4,
-                 cfg: SACConfig = SACConfig(), use_conv: bool = False):
+                 cfg: SACConfig = SACConfig(), use_conv: bool = False, in_channels: int = 5):
         self.cfg = cfg
         self.device = torch.device(cfg.device)
         self.action_dim = action_dim
 
         def _make_net(out_dim):
-            return PolicyNet(vec_dim, fov, out_dim, cfg.hidden_dim, use_conv).to(self.device)
+            return PolicyNet(vec_dim, fov, out_dim, cfg.hidden_dim, use_conv, in_channels).to(self.device)
 
         self.actor = _make_net(action_dim)
         self.q1 = _make_net(action_dim)

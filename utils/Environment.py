@@ -58,6 +58,13 @@ class PathEnv:
         if self.selected_mode is None:
             self.selected_mode = np.array(modelist)
 
+    def _patch_or_zero(self, mode, x, y):
+        """未选中的 mode 返回全零 FOV，避免噪声干扰。"""
+        if mode in self.selected_mode:
+            return get_patch(self.mapdata[mode], x, y, size=self.FOV)
+        else:
+            return [0] * (self.FOV * self.FOV)
+
     def reset(self):
 
         self.step_cnt = 0
@@ -98,7 +105,13 @@ class PathEnv:
                       'previous_remaining_distance':np.array([self.locx_end - self.locx_start, self.locy_end - self.locy_start]), # 上一步剩余距离
                       'total_distance':np.array([self.locx_end - self.locx_start, self.locy_end - self.locy_start]), # 总距离（定值）
                       'current_mode':self.selected_mode,    # 当前模式（定值）
-                      'patch':(get_patch(self.multi_mapdata, self.locx_start, self.locy_start, size=self.FOV)), # 邻域信息
+                      'patch':(
+                          get_patch(self.multi_mapdata, self.locx_start, self.locy_start, size=self.FOV) +
+                          self._patch_or_zero('TG', self.locx_start, self.locy_start) +
+                          self._patch_or_zero('GG', self.locx_start, self.locy_start) +
+                          self._patch_or_zero('GSD', self.locx_start, self.locy_start) +
+                          self._patch_or_zero('TS', self.locx_start, self.locy_start)
+                      ), # 邻域信息 (5通道: 合并 + TG + GG + GSD + TS, 未选中mode归零)
                       'visit_count': 0
                       }
 
@@ -232,7 +245,13 @@ class PathEnv:
         
         # 更新neighbor为新位置的邻域信息
         self.neighbor = get_patch(self.multi_mapdata, self.locx_start, self.locy_start, size=3)
-        self.state['patch'] = get_patch(self.multi_mapdata, self.locx_start, self.locy_start, size=self.FOV)
+        self.state['patch'] = (
+            get_patch(self.multi_mapdata, self.locx_start, self.locy_start, size=self.FOV) +
+            self._patch_or_zero('TG', self.locx_start, self.locy_start) +
+            self._patch_or_zero('GG', self.locx_start, self.locy_start) +
+            self._patch_or_zero('GSD', self.locx_start, self.locy_start) +
+            self._patch_or_zero('TS', self.locx_start, self.locy_start)
+        )
 
         # 判断done:涉及reward更新
         if curr_dist <= self.distance_threshold:
@@ -287,7 +306,7 @@ class ModeEnv:
         device = torch.device(cfg.device)
 
         path_agent = DiscreteSACAgent(vec_dim=12, fov=self.fov, action_dim=4,
-                                       cfg=cfg, use_conv=self.use_conv)
+                                       cfg=cfg, use_conv=self.use_conv, in_channels=5)
         state_dict = torch.load(self.model_path, map_location=device)
         path_agent.actor.load_state_dict(state_dict)
         path_agent.actor.eval()
