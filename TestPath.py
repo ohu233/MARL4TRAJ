@@ -19,7 +19,7 @@ from utils.geo_utils import grid_to_mercator, grid_bounds_to_mercator
 from utils.basemap import add_osm_basemap
 
 # ========== 配置 ==========
-traj_test = pd.read_csv('data\\Nanjing_to_GaochunLishui_Selected.csv')
+traj_test = pd.read_csv('data\data_lower_test_filtered.csv')
 EPISODES = len(traj_test)
 MAX_STEPS = 300
 MODEL_PATH = "PathModel\sac_actor_ep5000_withConv_withCurri.pth"
@@ -33,8 +33,8 @@ USE_ROW_MODE_FROM_DATA = True
 
 # True: 使用 OSM 瓦片底图（需联网，坐标用 Web Mercator）
 # False: 使用 figure 文件夹路网图作为底图（离线，坐标用 grid）
-USE_OSM_BASEMAP = True
-SAVE_FIGURES = True
+USE_OSM_BASEMAP = False
+SAVE_FIGURES = False
 # ========== figure 底图相关（仅 USE_OSM_BASEMAP=False 时生效） ==========
 MAP_ROW, MAP_COL = 529, 564
 FIGURE_DIR = "figure"
@@ -577,7 +577,7 @@ if __name__ == "__main__":
         base = os.path.splitext(os.path.basename(MODEL_PATH))[0]
         SAVE_DIR = os.path.join(base + "_test")
 
-    traj_test = pd.read_csv('data\\Nanjing_to_GaochunLishui_Selected.csv')
+    traj_test = pd.read_csv('data\data_lower_test_filtered.csv')
 
     env = load_env(traj_test, use_row_mode_from_data=USE_ROW_MODE_FROM_DATA, fov=FOV)
     agent = load_agent(env, MODEL_PATH, use_conv=USE_CONV)
