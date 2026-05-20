@@ -12,25 +12,23 @@ from utils.geo_utils import full_grid_bounds_mercator
 # 设为 False 可回退到旧 JPEG 底图
 USE_OSM_BASEMAP = True
 
-OSM_PROVIDER = xyzservices.TileProvider(
-    url="https://tile.openstreetmap.org/{z}/{x}/{y}.png",
-    max_zoom=19,
-    min_zoom=0,
-    attribution="(C) OpenStreetMap contributors",
-    name="OpenStreetMap.Mapnik",
-)
+OSM_PROVIDER = xyzservices.providers.Gaode.Normal
 
 
 def add_osm_basemap(ax, alpha=1.0, zoom=None):
     """在给定 Axes 上叠加 OSM 道路瓦片底图。Axes 需已在 EPSG:3857 空间。"""
-    ctx.add_basemap(
-        ax,
-        crs="EPSG:3857",
-        source=OSM_PROVIDER,
-        zoom=zoom or "auto",
-        alpha=alpha,
-        reset_extent=False,
-    )
+    try:
+        ctx.add_basemap(
+            ax,
+            crs="EPSG:3857",
+            source=OSM_PROVIDER,
+            zoom=zoom or "auto",
+            alpha=alpha,
+            reset_extent=False,
+        )
+    except Exception as e:
+        print(f"[basemap] OSM 瓦片下载失败，回退到 JPEG 底图: {e}")
+        _add_jpeg_fallback(ax)
 
 
 def set_ax_extent(ax, xmin, xmax, ymin, ymax):

@@ -19,7 +19,7 @@ from utils.geo_utils import grid_to_mercator, grid_bounds_to_mercator
 from utils.basemap import add_osm_basemap
 
 # ========== 配置 ==========
-traj_test = pd.read_csv('data/data_lower_test_filtered.csv')
+traj_test = pd.read_csv('data\\Nanjing_to_GaochunLishui_Selected.csv')
 EPISODES = len(traj_test)
 MAX_STEPS = 300
 MODEL_PATH = "PathModel\sac_actor_ep5000_withConv_withCurri.pth"
@@ -33,15 +33,15 @@ USE_ROW_MODE_FROM_DATA = True
 
 # True: 使用 OSM 瓦片底图（需联网，坐标用 Web Mercator）
 # False: 使用 figure 文件夹路网图作为底图（离线，坐标用 grid）
-USE_OSM_BASEMAP = False
-SAVE_FIGURES = False
+USE_OSM_BASEMAP = True
+SAVE_FIGURES = True
 # ========== figure 底图相关（仅 USE_OSM_BASEMAP=False 时生效） ==========
 MAP_ROW, MAP_COL = 529, 564
 FIGURE_DIR = "figure"
 DEFAULT_BACKIMG_PATH = "figur/all_modes_js.png"
 
 MODE_COLORS = {
-    "TG": "orange",
+    "TG": "purple",
     "GG": "blue",
     "GSD": "green",
     "TS": "red",
@@ -91,7 +91,7 @@ def _load_mode_background(selected_mode, fallback_mode=None, cache=None):
 
 def mode_legend_handles():
     return [
-        Line2D([0], [0], color="orange", lw=2, label="TG"),
+        Line2D([0], [0], color="purple", lw=2, label="TG"),
         Line2D([0], [0], color="blue", lw=2, label="GG"),
         Line2D([0], [0], color="green", lw=2, label="GSD"),
         Line2D([0], [0], color="red", lw=2, label="TS"),
@@ -227,16 +227,19 @@ def run_eval_with_plots(env, agent, traj_df, episodes: int,
             x_min_local, x_max_local = xs.min() - 2, xs.max() + 2
             y_min_local, y_max_local = ys.min() - 2, ys.max() + 2
 
+            order_idx = int(row['order']) if 'order' in row else ep
             if USE_OSM_BASEMAP:
-                _plot_episode_osm(traj_arr, end_xy, mode_str, ep, success_flag,
+                _plot_episode_osm(traj_arr, end_xy, mode_str, row_id, order_idx,
+                                  success_flag,
                                   x_min_local, x_max_local, y_min_local, y_max_local,
                                   env, save_dir)
             else:
-                _plot_episode_figure(traj_arr, end_xy, mode_str, ep, success_flag,
+                _plot_episode_figure(traj_arr, end_xy, mode_str, row_id, order_idx,
+                                     success_flag,
                                      x_min_local, x_max_local, y_min_local, y_max_local,
                                      env, bg_cache, save_dir)
         except Exception as e:
-            print(f"Error plotting episode {ep}: {e}")
+            print(f"Error plotting ID={row_id} order={order_idx}: {e}")
 
     _flush_id_buffer()
 
@@ -257,7 +260,7 @@ def run_eval_with_plots(env, agent, traj_df, episodes: int,
 # ============================================================
 # OSM 底图版本：坐标转 Web Mercator，叠加 OSM 瓦片
 # ============================================================
-def _plot_episode_osm(traj_arr, end_xy, mode_str, ep, success_flag,
+def _plot_episode_osm(traj_arr, end_xy, mode_str, row_id, idx, success_flag,
                        x_min_local, x_max_local, y_min_local, y_max_local,
                        env, save_dir):
     fig, ax = plt.subplots(figsize=(6, 5))
@@ -300,13 +303,13 @@ def _plot_episode_osm(traj_arr, end_xy, mode_str, ep, success_flag,
     ax.set_xlabel("Web Mercator X")
     ax.set_ylabel("Web Mercator Y")
     ax.set_title(
-        f"Ep {ep}, "
+        f"ID={row_id}, idx={idx}, "
         f"Succ={success_flag == 1}, Mode={mode_str}, "
         f"Selected Mode={env.selected_mode}"
     )
 
     filename = (
-        f"ep_{ep:04d}"
+        f"{row_id}_{idx:02d}"
         f"_succ_{success_flag}"
         f"_match_{calculate_match_rate(traj_arr.tolist(), env.multi_mapdata):.2f}"
         ".png"
@@ -315,13 +318,13 @@ def _plot_episode_osm(traj_arr, end_xy, mode_str, ep, success_flag,
     if SAVE_FIGURES:
         plt.savefig(ep_path, bbox_inches='tight', dpi=200)
     plt.close()
-    print(f"[Episode {ep}] reward saved: {ep_path}")
+    print(f"[ID={row_id} idx={idx}] saved: {ep_path}")
 
 
 # ============================================================
 # figure 底图版本：grid 坐标直接绘图，从 figure 中切片底图
 # ============================================================
-def _plot_episode_figure(traj_arr, end_xy, mode_str, ep, success_flag,
+def _plot_episode_figure(traj_arr, end_xy, mode_str, row_id, idx, success_flag,
                           x_min_local, x_max_local, y_min_local, y_max_local,
                           env, bg_cache, save_dir):
     episode_bg = _load_mode_background(
@@ -376,14 +379,14 @@ def _plot_episode_figure(traj_arr, end_xy, mode_str, ep, success_flag,
     plt.xlabel("X")
     plt.ylabel("Y")
     plt.title(
-        f"Ep {ep}, "
+        f"ID={row_id}, idx={idx}, "
         f"Succ={success_flag == 1}, Mode={mode_str}, "
         f"Selected Mode={env.selected_mode}"
     )
     plt.grid(True)
 
     filename = (
-        f"ep_{ep:04d}"
+        f"{row_id}_{idx:02d}"
         f"_succ_{success_flag}"
         f"_match_{calculate_match_rate(traj_arr.tolist(), env.multi_mapdata):.2f}"
         ".png"
@@ -392,7 +395,7 @@ def _plot_episode_figure(traj_arr, end_xy, mode_str, ep, success_flag,
     if SAVE_FIGURES:
         plt.savefig(ep_path, bbox_inches='tight', dpi=200)
     plt.close()
-    print(f"[Episode {ep}] reward saved: {ep_path}")
+    print(f"[ID={row_id} idx={idx}] saved: {ep_path}")
 
 
 def _plot_combined_for_id(items, tid, save_dir):
@@ -574,7 +577,7 @@ if __name__ == "__main__":
         base = os.path.splitext(os.path.basename(MODEL_PATH))[0]
         SAVE_DIR = os.path.join(base + "_test")
 
-    traj_test = pd.read_csv('data\\data_lower_test_filtered.csv')
+    traj_test = pd.read_csv('data\\Nanjing_to_GaochunLishui_Selected.csv')
 
     env = load_env(traj_test, use_row_mode_from_data=USE_ROW_MODE_FROM_DATA, fov=FOV)
     agent = load_agent(env, MODEL_PATH, use_conv=USE_CONV)
