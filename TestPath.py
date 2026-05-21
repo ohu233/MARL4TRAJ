@@ -22,7 +22,7 @@ from utils.basemap import add_osm_basemap
 traj_test = pd.read_csv('data\data_lower_test_filtered.csv')
 EPISODES = len(traj_test)
 MAX_STEPS = 300
-MODEL_PATH = "PathModel\sac_actor_ep8000_withConv_withCurri.pth"
+MODEL_PATH = "PathModel\sac_actor_ep7000_withConv_withCurri.pth"
 SAVE_DIR = None
 FOV = 7
 USE_CONV = True
@@ -34,7 +34,7 @@ USE_ROW_MODE_FROM_DATA = True
 # True: 使用 OSM 瓦片底图（需联网，坐标用 Web Mercator）
 # False: 使用 figure 文件夹路网图作为底图（离线，坐标用 grid）
 USE_OSM_BASEMAP = False
-SAVE_FIGURES = True
+SAVE_FIGURES = False
 # ========== figure 底图相关（仅 USE_OSM_BASEMAP=False 时生效） ==========
 MAP_ROW, MAP_COL = 529, 564
 FIGURE_DIR = "figure"

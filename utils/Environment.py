@@ -175,25 +175,16 @@ class PathEnv:
         action_to_idx = {0: 7, 1: 5, 2: 1, 3: 3}
         is_on_road = neighbor[action_to_idx[action]] != 0
         dist_change = prev_dist - curr_dist        
-        '''        
-        if is_on_road:
-            reward += 1  # 走在路上给予正向奖励
-        else:
-            reward -= 3 # 走到非道路区域给予惩罚
-
-        reward += dist_change * 1  # 系数可调，鼓励靠近
-        '''
 
         if is_on_road:
             reward += 1
+            if dist_change > 0:
+                reward += 3
         else:
             reward -= 5
 
-        if dist_change >= 0:
-            reward += 3
-
         # 步数惩罚：鼓励尽快到达
-        reward -= 0.5
+        reward -= 0.4
 
         return reward
 

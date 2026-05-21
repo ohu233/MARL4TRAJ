@@ -1,14 +1,14 @@
 import pandas as pd
 import os
 
-DATA_DIR = "data/Nanjing_GaochunLishui"
-dates = ['20230917', '20230923', '20250914', '20250920']
+DATA_DIR = "data/Xuancheng_GaochunLishui"
+dates = ['20250914', '20250920'] # '20230917', '20230923',
 DISTANCE_THRESHOLD = 18
 
 output_rows = []
 
 for date in dates:
-    filepath = os.path.join(DATA_DIR, f"dataset_{date}_nanjing_to_gaochun_lishui_with_grid.csv")
+    filepath = os.path.join(DATA_DIR, f"dataset_{date}_xuancheng_to_gaochun_lishui_with_grid.csv")
     df = pd.read_csv(filepath)
     df['ID'] = date + '_' + df['uid'].astype(str)
 
@@ -53,5 +53,5 @@ if not output_df.empty:
     order = ['ID', 'stime_o', 'stime_d', 'lat_o', 'lon_o', 'lat_d', 'lon_d', 'locx_o', 'locy_o', 'locx_d', 'locy_d', 'mode', 'time', 'distance']
     output_df = output_df[order]
 
-output_df.to_csv("data\\Nanjing_to_GaochunLishui.csv", index=False)
-print(f"Output: {len(output_df)} rows saved to Nanjing_to_GaochunLishui.csv")
+output_df.to_csv("data\\Xuancheng_to_GaochunLishui.csv", index=False)
+print(f"Output: {len(output_df)} rows saved to Xuancheng_to_GaochunLishui.csv")
