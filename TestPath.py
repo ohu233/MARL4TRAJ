@@ -22,7 +22,7 @@ from utils.basemap import add_osm_basemap
 traj_test = pd.read_csv('data\data_lower_test_filtered.csv')
 EPISODES = len(traj_test)
 MAX_STEPS = 300
-MODEL_PATH = "PathModel\sac_actor_ep5000_withConv_withCurri.pth"
+MODEL_PATH = "PathModel\sac_actor_ep8000_withConv_withCurri.pth"
 SAVE_DIR = None
 FOV = 7
 USE_CONV = True
@@ -34,7 +34,7 @@ USE_ROW_MODE_FROM_DATA = True
 # True: 使用 OSM 瓦片底图（需联网，坐标用 Web Mercator）
 # False: 使用 figure 文件夹路网图作为底图（离线，坐标用 grid）
 USE_OSM_BASEMAP = False
-SAVE_FIGURES = False
+SAVE_FIGURES = True
 # ========== figure 底图相关（仅 USE_OSM_BASEMAP=False 时生效） ==========
 MAP_ROW, MAP_COL = 529, 564
 FIGURE_DIR = "figure"
@@ -118,7 +118,7 @@ def load_agent(env, model_path: str, use_conv: bool = True):
     cfg = SACConfig(device="cpu")
     device = torch.device(cfg.device)
 
-    agent = DiscreteSACAgent(vec_dim=12, fov=env.FOV, action_dim=4,
+    agent = DiscreteSACAgent(vec_dim=16, fov=env.FOV, action_dim=4,
                               cfg=cfg, use_conv=use_conv, in_channels=5)
     state_dict = torch.load(model_path, map_location=device)
     agent.actor.load_state_dict(state_dict)
@@ -135,6 +135,7 @@ def run_eval_with_plots(env, agent, traj_df, episodes: int,
     all_trajs = []
     ep_rewards = []
     ep_success_flags = []
+    ep_trans = []
     traj_records = []
 
     bg_cache = {}
@@ -207,6 +208,7 @@ def run_eval_with_plots(env, agent, traj_df, episodes: int,
         id_buffer.append(item)
         ep_rewards.append(total_reward)
         ep_success_flags.append(success_flag)
+        ep_trans.append(env.min_trans_count)
 
         traj_list = [[float(p[0]), float(p[1])] for p in traj_arr]
         traj_records.append({
@@ -215,6 +217,7 @@ def run_eval_with_plots(env, agent, traj_df, episodes: int,
             "reward": float(total_reward),
             "success": int(success_flag),
             "match": calculate_match_rate(traj_arr.tolist(), env.multi_mapdata),
+            "min_trans": int(env.min_trans_count),
             "mode": 1 if mode in env.selected_mode else 0,
             "traj": json.dumps(traj_list, ensure_ascii=False),
         })
@@ -252,6 +255,7 @@ def run_eval_with_plots(env, agent, traj_df, episodes: int,
     print("=" * 60)
     print("Avg reward   : {:.3f}".format(np.mean(ep_rewards)))
     print("Success rate : {:.2f}%".format(np.mean(ep_success_flags) * 100))
+    print("Avg trans    : {:.1f}".format(np.mean(ep_trans)))
     print("=" * 60)
 
     return all_trajs
@@ -305,7 +309,7 @@ def _plot_episode_osm(traj_arr, end_xy, mode_str, row_id, idx, success_flag,
     ax.set_title(
         f"ID={row_id}, idx={idx}, "
         f"Succ={success_flag == 1}, Mode={mode_str}, "
-        f"Selected Mode={env.selected_mode}"
+        f"Selected Mode={env.selected_mode}, Trans={env.min_trans_count}"
     )
 
     filename = (
@@ -381,7 +385,7 @@ def _plot_episode_figure(traj_arr, end_xy, mode_str, row_id, idx, success_flag,
     plt.title(
         f"ID={row_id}, idx={idx}, "
         f"Succ={success_flag == 1}, Mode={mode_str}, "
-        f"Selected Mode={env.selected_mode}"
+        f"Selected Mode={env.selected_mode}, Trans={env.min_trans_count}"
     )
     plt.grid(True)
 

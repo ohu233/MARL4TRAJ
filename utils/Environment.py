@@ -112,13 +112,17 @@ class PathEnv:
                           self._patch_or_zero('GSD', self.locx_start, self.locy_start) +
                           self._patch_or_zero('TS', self.locx_start, self.locy_start)
                       ), # 邻域信息 (5通道: 合并 + TG + GG + GSD + TS, 未选中mode归零)
-                      'visit_count': 0
+                      'visit_count': 0,
+                      'candidate_modes': set(),  # 占位，下面填充
                       }
 
-        self.prev_active_modes = {
+        start_modes = {
             mode for mode in self.selected_mode
             if self.mapdata[mode][int(self.locx_start)][int(self.locy_start)] == 1
         }
+        self.candidate_modes = start_modes.copy()
+        self.state['candidate_modes'] = self.candidate_modes
+        self.min_trans_count = 0
 
         return self.state
 
@@ -227,9 +231,16 @@ class PathEnv:
             mode for mode in self.selected_mode
             if self.mapdata[mode][int(self.locx_start)][int(self.locy_start)] == 1
         }
-        if self.prev_active_modes and curr_active_modes.isdisjoint(self.prev_active_modes):
-            reward -= 2
-        self.prev_active_modes = curr_active_modes
+        # 最小转换次数：通过交集维护出行模式集合
+        # 交集为空 → 模式发生硬性改变，转换数+1，集合重置为当前模式
+        new_candidate = self.candidate_modes & curr_active_modes
+        if (self.candidate_modes or curr_active_modes) and len(new_candidate) == 0:
+            self.min_trans_count += 1
+            reward -= 1
+            self.candidate_modes = curr_active_modes.copy()
+        else:
+            self.candidate_modes = new_candidate
+        self.state['candidate_modes'] = self.candidate_modes
 
         # 更新上一步剩余距离向量
         self.state['previous_remaining_distance'] = self.state['remaining_distance']
@@ -305,7 +316,7 @@ class ModeEnv:
         cfg = SACConfig()
         device = torch.device(cfg.device)
 
-        path_agent = DiscreteSACAgent(vec_dim=12, fov=self.fov, action_dim=4,
+        path_agent = DiscreteSACAgent(vec_dim=16, fov=self.fov, action_dim=4,
                                        cfg=cfg, use_conv=self.use_conv, in_channels=5)
         state_dict = torch.load(self.model_path, map_location=device)
         path_agent.actor.load_state_dict(state_dict)

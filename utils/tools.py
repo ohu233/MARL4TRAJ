@@ -84,9 +84,16 @@ def state_to_vector(state: Dict, mode_list: List[str] = MODE_LIST) -> np.ndarray
         if current_mode in mode_list:
             mode_onehot[mode_list.index(current_mode)] = 1.0
 
+    # candidate_modes one-hot：维护的出行模式交集
+    candidate_onehot = np.zeros(len(mode_list), dtype=np.float32)
+    candidate_modes = state.get('candidate_modes', set())
+    for m in candidate_modes:
+        if m in mode_list:
+            candidate_onehot[mode_list.index(m)] = 1.0
+
     patch = np.array(state['patch'], dtype=np.float32).reshape(-1)
 
-    vec = np.concatenate([init_pos, target_pos, cur_pos, rel_dis, mode_onehot, patch], axis=0)
+    vec = np.concatenate([init_pos, target_pos, cur_pos, rel_dis, mode_onehot, candidate_onehot, patch], axis=0)
     return vec
 
 

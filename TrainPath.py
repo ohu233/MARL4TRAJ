@@ -50,7 +50,7 @@ def train_sac_on_pathenv(
     env.traj_cnt = 0
 
     action_dim = 4
-    agent = DiscreteSACAgent(vec_dim=12, fov=env.FOV, action_dim=action_dim,
+    agent = DiscreteSACAgent(vec_dim=16, fov=env.FOV, action_dim=action_dim,
                               cfg=cfg, use_conv=use_conv, in_channels=5)
 
     stage_trajs = env.split_traj_by_distance(curriculum_cfg.num_stages)
@@ -68,6 +68,7 @@ def train_sac_on_pathenv(
     logs = []
     success_list = []
     match_list = [] # 存储匹配度
+    trans_count_list = []
     traj_list = []  # 临时存储轨迹
 
     avg_reward_100_list = []
@@ -165,6 +166,7 @@ def train_sac_on_pathenv(
         logs.append(ep_reward)
         success_list.append(success)
         match_list.append(match_rate)
+        trans_count_list.append(env.min_trans_count)
 
         window = curriculum_cfg.metrics_window
         avg_reward_100 = np.mean(logs[-window:])
@@ -190,6 +192,7 @@ def train_sac_on_pathenv(
                 f"average reward 100={avg_reward_100:.3f}, "
                 f"reach rate={reach_rate_100:.2f}%, "
                 f"match rate={match_rate_100:.2f}%, "
+                f"trans={env.min_trans_count}, "
                 f"stage={stage_idx + 1}/{len(stage_trajs)}, "
                 f"mode=random1-{env.max_mode_count}"
             )
@@ -302,6 +305,7 @@ def train_sac_on_pathenv(
         "curriculum_stage": curriculum_stage_list,
         "mode_max_count": mode_max_count_list,
         "in_refine_phase": refine_phase_list,
+        "min_trans_count": trans_count_list,
     })
 
     metrics_df.to_csv(f"PathModel/train_metrics{tag}.csv", index=False, encoding="utf-8")
@@ -341,7 +345,7 @@ if __name__ == "__main__":
     curriculum_cfg = CurriculumConfig(
         num_stages=4 if curriculum_mode else 1,  # 非课程学习时需要把该参数调整为1 否则为4
         metrics_window=100,
-        min_stage_episodes=300,
+        min_stage_episodes=600,
         promote_reach_rate=85.0,
         promote_match_rate=70.0,
         promote_patience=3,
@@ -352,4 +356,4 @@ if __name__ == "__main__":
         prev_stage_mix_ratio=0.2,
     )
 
-    agent, logs = train_sac_on_pathenv(env, episodes=5000, curriculum_cfg=curriculum_cfg, use_conv=USE_CONV)
+    agent, logs = train_sac_on_pathenv(env, episodes=8000, curriculum_cfg=curriculum_cfg, use_conv=USE_CONV)
